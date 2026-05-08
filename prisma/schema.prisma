@@ -1,0 +1,318 @@
+// Schema do banco de dados - Coliseu Academia
+// Login agora é via Supabase (separado)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============== ENUMS ==============
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  PENDING  // Logou mas ainda não foi aprovado
+}
+
+enum LeadStage {
+  NEW              // Acabou de chegar
+  QUALIFIED        // Disse o nome, qualificado
+  EXPERIMENTAL     // Marcou ou fez aula experimental
+  CLOSING          // Escolheu plano + forma de pagamento (Caixa de Fechamento)
+  WON              // Virou aluno
+  LOST             // Não respondeu / desistiu
+}
+
+enum LeadQualification {
+  HOT
+  WARM
+  COLD
+  UNKNOWN
+}
+
+enum ConversationStatus {
+  AI_ACTIVE       // Atena respondendo
+  HUMAN_ACTIVE    // Humano assumiu
+  WAITING_HUMAN   // Atena escalou e aguarda
+  RESOLVED        // Conversa fechada
+}
+
+enum MessageSender {
+  CLIENT
+  AI
+  HUMAN
+}
+
+enum Modality {
+  PILATES
+  MUSCULACAO
+  CROSSTRAINING
+}
+
+enum AppointmentType {
+  EXPERIMENTAL    // Aula experimental gratuita
+  REGULAR         // Aula normal de aluno
+}
+
+enum AppointmentStatus {
+  SCHEDULED       // Marcado
+  CONFIRMED       // Confirmado pelo cliente
+  COMPLETED       // Aluno compareceu
+  NO_SHOW         // Não compareceu
+  CANCELLED       // Cancelado
+}
+
+enum NotificationSeverity {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum NotificationType {
+  ESCALATION
+  NEW_CLOSING_LEAD     // Lead chegou no fechamento
+  EXPERIMENTAL_DONE    // Aula experimental aconteceu
+  AI_FAILED            // Atena falhou
+  CUSTOM
+}
+
+// ============== USUÁRIOS DO PAINEL ==============
+// Sincronizado com Supabase Auth - cada User aqui tem um usuário no Supabase com mesmo email
+
+model User {
+  id            String    @id @default(cuid())
+  supabaseId    String?   @unique  // ID do user no Supabase Auth
+  email         String    @unique
+  name          String?
+  image         String?
+  role          UserRole  @default(PENDING)
+
+  teacher       Teacher?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([email])
+}
+
+// ============== ACADEMIA ==============
+
+// Professor (vinculado a um User)
+model Teacher {
+  id              String              @id @default(cuid())
+  userId          String              @unique
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String              // Nome de exibição
+  modalities      Modality[]          // Modalidades que dá aula
+  hourlyRate      Int                 @default(0) // valor por hora em centavos (0 = não recebe / pró-labore)
+  isOwner         Boolean             @default(false) // se é dono (pró-labore)
+  active          Boolean             @default(true)
+
+  appointments    Appointment[]
+  schedules       TeacherSchedule[]
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+// Grade de horários do professor
+model TeacherSchedule {
+  id          String     @id @default(cuid())
+  teacherId   String
+  teacher     Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  modality    Modality
+  weekday     Int        // 0=Domingo ... 6=Sábado
+  hour        Int        // 5..21
+
+  active      Boolean    @default(true)
+
+  @@unique([teacherId, modality, weekday, hour])
+  @@index([modality, weekday, hour])
+}
+
+// Plano (Smart, Elite, Flex × modalidade × frequência)
+model Plan {
+  id              String     @id @default(cuid())
+  modality        Modality
+  name            String     // "Smart", "Elite", "Flex"
+  frequency       String     // "2x/semana", "3x/semana", "5x/semana"
+  priceInCents    Int
+  durationMonths  Int        @default(1) // 1=mensal, 12=anual
+  features        String[]
+  active          Boolean    @default(true)
+
+  students        Student[]
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([modality, name, frequency])
+}
+
+// Lead (contato que ainda não é aluno)
+model Lead {
+  id              String              @id @default(cuid())
+  phone           String              @unique
+  name            String?
+  email           String?
+  qualification   LeadQualification   @default(UNKNOWN)
+  stage           LeadStage           @default(NEW)
+  notes           String?             @db.Text
+
+  // Funil
+  interestedModality Modality?
+  interestedPlan     String?
+  paymentMethod      String?
+
+  // Aula experimental
+  experimentalDone   Boolean          @default(false)
+  experimentalDate   DateTime?
+
+  // Conversão
+  convertedAt        DateTime?
+  convertedToStudent String?
+
+  conversations   Conversation[]
+  appointments    Appointment[]
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([phone])
+  @@index([stage])
+  @@index([qualification])
+}
+
+// Aluno (cliente pagante)
+model Student {
+  id                String          @id @default(cuid())
+  phone             String          @unique
+  name              String
+  email             String?
+
+  modality          Modality
+  planId            String?
+  plan              Plan?           @relation(fields: [planId], references: [id])
+
+  paymentDay        Int?            // dia do mês (1-31)
+  status            String          @default("active")
+
+  notes             String?         @db.Text
+
+  conversations     Conversation[]
+  appointments      Appointment[]
+
+  enrolledAt        DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([phone])
+  @@index([modality])
+}
+
+// Conversa do WhatsApp
+model Conversation {
+  id              String              @id @default(cuid())
+
+  leadId          String?
+  lead            Lead?               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  studentId       String?
+  student         Student?            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  status          ConversationStatus  @default(AI_ACTIVE)
+  assignedHuman   String?
+  lastMessageAt   DateTime            @default(now())
+  unreadCount     Int                 @default(0)
+  resolvedAt      DateTime?
+
+  messages        Message[]
+  notifications   SupervisorNotification[]
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status])
+  @@index([lastMessageAt])
+}
+
+// Mensagem
+model Message {
+  id              String              @id @default(cuid())
+  conversationId  String
+  conversation    Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  sender          MessageSender
+  content         String              @db.Text
+  authorName      String?
+
+  whatsappMessageId String?           @unique
+
+  isAudio         Boolean             @default(false)
+  audioTranscript String?             @db.Text
+  hasAttachment   Boolean             @default(false)
+  attachmentUrl   String?
+
+  metaTags        Json?
+
+  createdAt       DateTime            @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// Agendamento
+model Appointment {
+  id              String              @id @default(cuid())
+
+  leadId          String?
+  lead            Lead?               @relation(fields: [leadId], references: [id])
+  studentId       String?
+  student         Student?            @relation(fields: [studentId], references: [id])
+
+  teacherId       String
+  teacher         Teacher             @relation(fields: [teacherId], references: [id])
+  modality        Modality
+
+  scheduledAt     DateTime
+  type            AppointmentType     @default(REGULAR)
+  status          AppointmentStatus   @default(SCHEDULED)
+  notes           String?             @db.Text
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([scheduledAt, status])
+  @@index([teacherId, scheduledAt])
+  @@index([modality, scheduledAt])
+}
+
+// Notificações pro supervisor
+model SupervisorNotification {
+  id              String                @id @default(cuid())
+  conversationId  String?
+  conversation    Conversation?         @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  type            NotificationType
+  severity        NotificationSeverity  @default(MEDIUM)
+  title           String
+  detail          String                @db.Text
+  read            Boolean               @default(false)
+  resolvedAt      DateTime?
+
+  createdAt       DateTime              @default(now())
+
+  @@index([read, createdAt])
+}
+
+// Configurações
+model Settings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   @db.Text
+  updatedAt   DateTime @updatedAt
+}
