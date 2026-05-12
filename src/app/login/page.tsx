@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 
 export default function LoginPage() {
@@ -22,11 +22,11 @@ function LoadingScreen() {
 
 function LoginContent() {
   const params = useSearchParams();
+  const router = useRouter();
   const errorParam = params.get('error');
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(errorParam);
 
   useEffect(() => {
@@ -42,11 +42,12 @@ function LoginContent() {
     setLoading(true);
     setError(null);
 
+    const normalizedEmail = email.trim().toLowerCase();
     const supabase = createClient();
     const { error: signInError } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        shouldCreateUser: true,
       },
     });
 
@@ -58,7 +59,7 @@ function LoginContent() {
       return;
     }
 
-    setSent(true);
+    router.push(`/login/code?email=${encodeURIComponent(normalizedEmail)}`);
   };
 
   return (
@@ -97,80 +98,53 @@ function LoginContent() {
             boxShadow: '0 0 60px var(--accent-soft)',
           }}
         >
-          {!sent ? (
-            <>
-              <h2 className="font-display text-2xl mb-2">Acesso restrito</h2>
-              <p className="text-sm mb-6" style={{ color: 'var(--text-2)' }}>
-                Digite seu email pra receber um link de acesso
-              </p>
+          <h2 className="font-display text-2xl mb-2">Acesso restrito</h2>
+          <p className="text-sm mb-6" style={{ color: 'var(--text-2)' }}>
+            Digite seu email pra receber um código de acesso
+          </p>
 
-              <form onSubmit={handleSubmit}>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="seu@email.com"
-                  required
-                  autoFocus
-                  disabled={loading}
-                  className="w-full px-4 py-3 rounded-xl text-sm mb-4"
-                  style={{
-                    background: 'var(--bg-2)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text)',
-                    outline: 'none',
-                  }}
-                />
+          <form onSubmit={handleSubmit}>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="seu@email.com"
+              required
+              autoFocus
+              disabled={loading}
+              className="w-full px-4 py-3 rounded-xl text-sm mb-4"
+              style={{
+                background: 'var(--bg-2)',
+                border: '1px solid var(--border)',
+                color: 'var(--text)',
+                outline: 'none',
+              }}
+            />
 
-                <button
-                  type="submit"
-                  disabled={loading || !email.trim()}
-                  className="w-full px-6 py-3 rounded-xl font-medium transition-all"
-                  style={{
-                    background: loading ? 'var(--surface-2)' : 'var(--accent)',
-                    color: 'white',
-                    opacity: loading || !email.trim() ? 0.6 : 1,
-                    cursor: loading || !email.trim() ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {loading ? 'Enviando...' : '📧 Receber link de acesso'}
-                </button>
-              </form>
+            <button
+              type="submit"
+              disabled={loading || !email.trim()}
+              className="w-full px-6 py-3 rounded-xl font-medium transition-all"
+              style={{
+                background: loading ? 'var(--surface-2)' : 'var(--accent)',
+                color: 'white',
+                opacity: loading || !email.trim() ? 0.6 : 1,
+                cursor: loading || !email.trim() ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {loading ? 'Enviando...' : '📧 Receber código de acesso'}
+            </button>
+          </form>
 
-              {error && (
-                <div className="mt-4 p-3 rounded-lg text-xs" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.3)' }}>
-                  ❌ {error}
-                </div>
-              )}
-
-              <div className="mt-6 text-xs" style={{ color: 'var(--text-3)' }}>
-                Apenas admins e professores cadastrados<br/>têm acesso ao sistema
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="mb-4 text-5xl">📬</div>
-              <h2 className="font-display text-2xl mb-3">Verifica teu email!</h2>
-              <p className="text-sm mb-2" style={{ color: 'var(--text-2)' }}>
-                Mandamos um link de acesso pra:
-              </p>
-              <p className="text-sm font-mono mb-6" style={{ color: 'var(--accent)' }}>
-                {email}
-              </p>
-              <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                ⏱️ O link expira em 1 hora.<br/>
-                Não esquece de checar a caixa de spam.
-              </p>
-
-              <button
-                onClick={() => { setSent(false); setEmail(''); }}
-                className="mt-6 text-sm underline"
-                style={{ color: 'var(--text-2)' }}
-              >
-                Usar outro email
-              </button>
-            </>
+          {error && (
+            <div className="mt-4 p-3 rounded-lg text-xs" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.3)' }}>
+              ❌ {error}
+            </div>
           )}
+
+          <div className="mt-6 text-xs" style={{ color: 'var(--text-3)' }}>
+            Apenas admins e professores cadastrados<br/>têm acesso ao sistema
+          </div>
         </div>
 
         <p className="mt-8 text-xs" style={{ color: 'var(--text-4)' }}>
