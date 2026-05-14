@@ -41,14 +41,14 @@ async function main() {
   }
   console.log(`💎 ${plans.length} planos cadastrados`);
 
-  // ===== CONFIGURAÇÕES =====
+  // ===== CONFIGURAÇÕES =====h
   const settings = [
     { key: 'shop_name',         value: 'Coliseu Academia' },
-    { key: 'shop_address',      value: 'Teixeira de Freitas - BA' },
-    { key: 'shop_hours',        value: 'Segunda a Sábado, 8h às 21h' },
-    { key: 'payment_methods',   value: 'PIX, cartão de crédito, débito, dinheiro' },
+    { key: 'shop_address',      value: 'Av. Padre Anchieta, 367 - Jardim Caraipe, Teixeira de Freitas - BA, 45998-002' },
+    { key: 'shop_hours',        value: 'Segunda a Sábado, 5h às 22h' },
+    { key: 'payment_methods',   value: 'PIX, cartão de crédito, débito, dinheiro e boleto' },
     { key: 'capacity_pilates',       value: '4' },
-    { key: 'capacity_musculacao',    value: '6' },
+    { key: 'capacity_musculacao',    value: '2' },
     { key: 'capacity_crosstraining', value: '22' },
     { key: 'experimental_active',    value: 'true' },
     { key: 'ai_active',              value: 'true' },
