@@ -39,7 +39,7 @@ function CodeContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.length !== 6 || loading) return;
+    if (code.length < 6 || loading) return;
 
     setLoading(true);
     setError(null);
@@ -87,7 +87,7 @@ function CodeContent() {
   };
 
   const handleCodeChange = (value: string) => {
-    const digitsOnly = value.replace(/\D/g, '').slice(0, 6);
+    const digitsOnly = value.replace(/\D/g, '').slice(0, 8);
     setCode(digitsOnly);
   };
 
@@ -130,7 +130,7 @@ function CodeContent() {
           <div className="mb-4 text-5xl">🔑</div>
           <h2 className="font-display text-2xl mb-3">Digite o código</h2>
           <p className="text-sm mb-2" style={{ color: 'var(--text-2)' }}>
-            Mandamos um código de 6 dígitos pra:
+            Mandamos um código de acesso pra:
           </p>
           <p className="text-sm font-mono mb-6" style={{ color: 'var(--accent)' }}>
             {email}
@@ -143,11 +143,11 @@ function CodeContent() {
               pattern="[0-9]*"
               value={code}
               onChange={e => handleCodeChange(e.target.value)}
-              placeholder="000000"
+              placeholder="00000000"
               required
               autoFocus
               disabled={loading}
-              maxLength={6}
+              maxLength={8}
               className="w-full px-4 py-4 rounded-xl mb-4 text-center font-mono"
               style={{
                 background: 'var(--bg-2)',
@@ -155,19 +155,19 @@ function CodeContent() {
                 color: 'var(--text)',
                 outline: 'none',
                 fontSize: '28px',
-                letterSpacing: '0.5em',
+                letterSpacing: '0.3em',
               }}
             />
 
             <button
               type="submit"
-              disabled={loading || code.length !== 6}
+              disabled={loading || code.length < 6}
               className="w-full px-6 py-3 rounded-xl font-medium transition-all"
               style={{
                 background: loading ? 'var(--surface-2)' : 'var(--accent)',
                 color: 'white',
-                opacity: loading || code.length !== 6 ? 0.6 : 1,
-                cursor: loading || code.length !== 6 ? 'not-allowed' : 'pointer',
+                opacity: loading || code.length < 6 ? 0.6 : 1,
+                cursor: loading || code.length < 6 ? 'not-allowed' : 'pointer',
               }}
             >
               {loading ? 'Verificando...' : '✓ Entrar'}
