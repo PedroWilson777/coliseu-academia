@@ -68,7 +68,12 @@ function ChatContent() {
   const [filter, setFilter] = useState('all');
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [gravando, setGravando] = useState(false);
+  const [enviandoAudio, setEnviandoAudio] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const audioStreamRef = useRef<MediaStream | null>(null);
 
   const loadInbox = useCallback(async () => {
     const res = await fetch('/api/conversations');
@@ -141,6 +146,59 @@ function ChatContent() {
   };
 
   const isPaused = activeConv?.status === 'HUMAN_ACTIVE' || activeConv?.status === 'WAITING_HUMAN';
+
+  const iniciarGravacao = async () => {
+    if (!isPaused || gravando || enviandoAudio) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        chunksRef.current = [];
+        audioStreamRef.current?.getTracks().forEach(t => t.stop());
+        await enviarAudio(blob, mimeType);
+      };
+
+      recorder.start();
+      setGravando(true);
+    } catch {
+      alert('Permita o acesso ao microfone para enviar áudios.');
+    }
+  };
+
+  const pararGravacao = () => {
+    if (mediaRecorderRef.current && gravando) {
+      mediaRecorderRef.current.stop();
+      setGravando(false);
+    }
+  };
+
+  const enviarAudio = async (blob: Blob, mimeType: string) => {
+    if (!activeConv) return;
+    setEnviandoAudio(true);
+    try {
+      const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const formData = new FormData();
+      formData.append('audio', blob, `audio.${ext}`);
+      await fetch(`/api/conversations/${activeConv.id}/audio`, {
+        method: 'POST',
+        body: formData,
+      });
+      await loadConv(activeConv.id);
+      await loadInbox();
+    } finally {
+      setEnviandoAudio(false);
+    }
+  };
 
   return (
     <div className="grid h-screen" style={{ gridTemplateColumns: '320px 1fr 300px', background: 'var(--bg)' }}>
@@ -266,6 +324,12 @@ function ChatContent() {
             </div>
 
             <div style={{ background: 'var(--bg-2)', borderTop: '1px solid var(--border)' }}>
+              {gravando && (
+                <div className="px-6 py-2 flex items-center gap-2 text-xs font-medium" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', borderBottom: '1px solid rgba(239,68,68,0.2)' }}>
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  Gravando... solte o botão para enviar
+                </div>
+              )}
               <div className="px-6 py-4 flex gap-2.5 items-end">
                 <textarea
                   value={input}
@@ -279,7 +343,7 @@ function ChatContent() {
                 <button
                   onClick={handleSend}
                   disabled={!isPaused || sending || !input.trim()}
-                  className="w-10 h-10 rounded-xl grid place-items-center"
+                  className="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0"
                   style={{
                     background: isPaused && input.trim() ? 'var(--accent)' : 'var(--surface-2)',
                     color: isPaused && input.trim() ? 'white' : 'var(--text-3)',
@@ -287,6 +351,43 @@ function ChatContent() {
                   }}
                 >
                   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12l14-7-7 14-2-5-5-2z"/></svg>
+                </button>
+
+                {/* Botão de áudio — segurar pra gravar */}
+                <button
+                  onMouseDown={iniciarGravacao}
+                  onMouseUp={pararGravacao}
+                  onTouchStart={iniciarGravacao}
+                  onTouchEnd={pararGravacao}
+                  disabled={!isPaused || enviandoAudio}
+                  title={gravando ? 'Solte pra enviar' : 'Segurar pra gravar áudio'}
+                  className="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0 transition-all select-none"
+                  style={{
+                    background: gravando
+                      ? '#ef4444'
+                      : enviandoAudio
+                      ? 'var(--surface-2)'
+                      : isPaused
+                      ? 'var(--surface)'
+                      : 'var(--surface-2)',
+                    border: `1px solid ${gravando ? '#ef4444' : 'var(--border)'}`,
+                    color: gravando ? 'white' : isPaused ? 'var(--text-2)' : 'var(--text-3)',
+                    cursor: isPaused && !enviandoAudio ? 'pointer' : 'not-allowed',
+                    transform: gravando ? 'scale(1.1)' : 'scale(1)',
+                  }}
+                >
+                  {enviandoAudio ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="2" width="6" height="12" rx="3"/>
+                      <path strokeLinecap="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      <line x1="12" y1="19" x2="12" y2="22"/>
+                      <line x1="9" y1="22" x2="15" y2="22"/>
+                    </svg>
+                  )}
                 </button>
               </div>
             </div>
@@ -390,12 +491,28 @@ function MessageBubble({ m }: { m: MessageItem }) {
   return (
     <div className="mb-3 flex flex-row-reverse max-w-[70%] ml-auto animate-msg-in">
       <div>
-        <div className="px-3.5 py-2.5 rounded-2xl rounded-br text-sm font-medium" style={{
-          background: 'linear-gradient(135deg, var(--accent), #8b1820)',
-          color: 'white',
-        }}>
-          {m.content}
-        </div>
+        {m.isAudio ? (
+          <div className="px-3.5 py-2.5 rounded-2xl rounded-br flex items-center gap-2" style={{
+            background: 'linear-gradient(135deg, var(--accent), #8b1820)',
+            color: 'white',
+            minWidth: 120,
+          }}>
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <rect x="9" y="2" width="6" height="12" rx="3"/>
+              <path strokeLinecap="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+              <line x1="9" y1="22" x2="15" y2="22"/>
+            </svg>
+            <span className="text-sm">Áudio enviado</span>
+          </div>
+        ) : (
+          <div className="px-3.5 py-2.5 rounded-2xl rounded-br text-sm font-medium" style={{
+            background: 'linear-gradient(135deg, var(--accent), #8b1820)',
+            color: 'white',
+          }}>
+            {m.content}
+          </div>
+        )}
         <div className="text-[10px] mt-1 uppercase text-right" style={{ color: 'var(--text-3)' }}>
           <span className="font-semibold" style={{ color: 'var(--accent)' }}>{m.authorName || 'Você'}</span> · {time}
         </div>

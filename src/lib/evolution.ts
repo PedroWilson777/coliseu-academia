@@ -79,6 +79,45 @@ export async function sendWhatsAppImage(
   }
 }
 
+export async function sendWhatsAppAudio(
+  phone: string,
+  audioBase64: string,
+): Promise<boolean> {
+  if (!EVOLUTION_URL || !EVOLUTION_KEY) return false;
+
+  const cleanPhone = phone.replace(/\D/g, '');
+
+  try {
+    const response = await fetch(
+      `${EVOLUTION_URL}/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': EVOLUTION_KEY,
+        },
+        body: JSON.stringify({
+          number: cleanPhone,
+          audio: audioBase64,
+          encoding: true,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error(`❌ Evolution audio erro ${response.status}:`, errorBody);
+      return false;
+    }
+
+    console.log(`🎤 Áudio enviado pra ${cleanPhone}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Erro envio áudio:', error);
+    return false;
+  }
+}
+
 export async function downloadWhatsAppMedia(
   messageId: string
 ): Promise<{ base64: string; mimetype: string } | null> {
