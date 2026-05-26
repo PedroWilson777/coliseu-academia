@@ -21,11 +21,13 @@ export async function askAtena(
   isStudent: boolean = false,
   studentName?: string
 ): Promise<AtenaResponse> {
-  const messages = await prisma.message.findMany({
+  // Busca as ÚLTIMAS 30 mensagens (desc) e reverte pra ordem cronológica
+  const rawMessages = await prisma.message.findMany({
     where: { conversationId },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { createdAt: 'desc' },
     take: 30,
   });
+  const messages = rawMessages.reverse();
 
   const apiMessages: { role: 'user' | 'assistant'; content: string }[] = messages.map(m => ({
     role: m.sender === 'CLIENT' ? 'user' : 'assistant',

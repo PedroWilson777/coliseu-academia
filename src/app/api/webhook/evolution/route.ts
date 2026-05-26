@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
 
     let isAudio = false;
     let audioTranscript = '';
+    let audioBase64: string | null = null;
 
     // Áudio
     if (data?.message?.audioMessage) {
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
 
       const media = await downloadWhatsAppMedia(messageId);
       if (media?.base64) {
+        audioBase64 = `data:${media.mimetype || 'audio/ogg'};base64,${media.base64}`;
         audioTranscript = await transcribeAudioFromBase64(media.base64);
         messageText = audioTranscript || '[áudio sem transcrição]';
         console.log(`🎤 Transcrito: "${audioTranscript.slice(0, 80)}..."`);
@@ -87,6 +89,7 @@ export async function POST(req: NextRequest) {
         whatsappMessageId: messageId || null,
         isAudio,
         audioTranscript: audioTranscript || null,
+        audioBase64: audioBase64 || null,
       },
     });
 

@@ -13,7 +13,8 @@ export async function GET() {
     include: {
       conversation: { include: { lead: true, student: true } },
     },
-    orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
+    // HIGH < MEDIUM < LOW em importância (asc por createdAt como desempate)
+    orderBy: [{ read: 'asc' }, { createdAt: 'desc' }],
     take: 50,
   });
 

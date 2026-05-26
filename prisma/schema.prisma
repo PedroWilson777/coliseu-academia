@@ -255,6 +255,7 @@ model Message {
 
   isAudio         Boolean             @default(false)
   audioTranscript String?             @db.Text
+  audioBase64     String?             @db.Text
   hasAttachment   Boolean             @default(false)
   attachmentUrl   String?
 

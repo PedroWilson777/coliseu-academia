@@ -43,13 +43,17 @@ export async function POST(
     }
   }
 
-  // Salva no banco
+  // Salva no banco (com base64 pra reproduzir no dashboard)
+  const mimeType = audioFile.type || 'audio/webm';
+  const audioDataUrl = `data:${mimeType};base64,${base64}`;
+
   const message = await prisma.message.create({
     data: {
       conversationId: params.id,
       sender: 'HUMAN',
       content: '[áudio]',
       isAudio: true,
+      audioBase64: audioDataUrl,
       authorName: user.name || user.email,
     },
   });

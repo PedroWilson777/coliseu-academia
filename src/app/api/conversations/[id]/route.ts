@@ -62,6 +62,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       createdAt: m.createdAt,
       isAudio: m.isAudio,
       audioTranscript: m.audioTranscript,
+      audioBase64: m.audioBase64,
     })),
   });
 }

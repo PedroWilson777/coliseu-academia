@@ -26,6 +26,7 @@ interface MessageItem {
   createdAt: string;
   isAudio: boolean;
   audioTranscript?: string;
+  audioBase64?: string;
 }
 
 interface ConvDetail {
@@ -455,14 +456,31 @@ function MessageBubble({ m }: { m: MessageItem }) {
     return (
       <div className="mb-3 flex max-w-[70%] animate-msg-in">
         <div>
-          {m.isAudio && m.audioTranscript && (
-            <div className="text-[11px] mb-1 italic flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
-              🎤 transcrito de áudio
+          {m.isAudio ? (
+            <div className="rounded-2xl rounded-bl overflow-hidden" style={{ background: 'var(--surface-2)' }}>
+              {m.audioBase64 && (
+                <div className="px-3 pt-2.5">
+                  <audio controls src={m.audioBase64} className="w-full h-8" style={{ minWidth: 200 }} />
+                </div>
+              )}
+              {m.audioTranscript && (
+                <div className="px-3.5 py-2 text-sm italic" style={{ color: 'var(--text-2)' }}>
+                  <span className="text-[10px] not-italic font-medium mr-1" style={{ color: 'var(--text-3)' }}>🎤</span>
+                  {m.audioTranscript}
+                </div>
+              )}
+              {!m.audioBase64 && !m.audioTranscript && (
+                <div className="px-3.5 py-2.5 text-sm flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path strokeLinecap="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
+                  Áudio
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="px-3.5 py-2.5 rounded-2xl rounded-bl text-sm" style={{ background: 'var(--surface-2)', color: 'var(--text)' }}>
+              {m.content}
             </div>
           )}
-          <div className="px-3.5 py-2.5 rounded-2xl rounded-bl text-sm" style={{ background: 'var(--surface-2)', color: 'var(--text)' }}>
-            {m.content}
-          </div>
           <div className="text-[10px] mt-1 uppercase" style={{ color: 'var(--text-3)' }}>{time}</div>
         </div>
       </div>
@@ -492,18 +510,20 @@ function MessageBubble({ m }: { m: MessageItem }) {
     <div className="mb-3 flex flex-row-reverse max-w-[70%] ml-auto animate-msg-in">
       <div>
         {m.isAudio ? (
-          <div className="px-3.5 py-2.5 rounded-2xl rounded-br flex items-center gap-2" style={{
+          <div className="rounded-2xl rounded-br overflow-hidden" style={{
             background: 'linear-gradient(135deg, var(--accent), #8b1820)',
-            color: 'white',
-            minWidth: 120,
+            minWidth: 200,
           }}>
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <rect x="9" y="2" width="6" height="12" rx="3"/>
-              <path strokeLinecap="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="22"/>
-              <line x1="9" y1="22" x2="15" y2="22"/>
-            </svg>
-            <span className="text-sm">Áudio enviado</span>
+            {m.audioBase64 ? (
+              <div className="px-3 py-2">
+                <audio controls src={m.audioBase64} className="w-full h-8" />
+              </div>
+            ) : (
+              <div className="px-3.5 py-2.5 flex items-center gap-2 text-white">
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path strokeLinecap="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
+                <span className="text-sm">Áudio enviado</span>
+              </div>
+            )}
           </div>
         ) : (
           <div className="px-3.5 py-2.5 rounded-2xl rounded-br text-sm font-medium" style={{
