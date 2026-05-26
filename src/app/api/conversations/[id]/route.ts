@@ -66,3 +66,24 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     })),
   });
 }
+
+export async function DELETE(_req: NextRequest, { params }: RouteParams) {
+  const user = await requireAuth();
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const conv = await prisma.conversation.findUnique({
+    where: { id: params.id },
+    include: { lead: { include: { conversations: true } } },
+  });
+  if (!conv) return NextResponse.json({ error: 'not found' }, { status: 404 });
+
+  // Apaga a conversa (mensagens e notificações caem em cascade)
+  await prisma.conversation.delete({ where: { id: params.id } });
+
+  // Se era lead e não tem outras conversas, apaga o lead também
+  if (conv.lead && conv.lead.conversations.length <= 1) {
+    await prisma.lead.delete({ where: { id: conv.lead.id } }).catch(() => null);
+  }
+
+  return NextResponse.json({ ok: true });
+}
