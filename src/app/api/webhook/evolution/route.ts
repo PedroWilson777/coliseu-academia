@@ -13,6 +13,16 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  // Verifica secret do webhook (proteção contra requests externos)
+  const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
+  if (webhookSecret) {
+    const apiKey = req.headers.get('apikey') || req.headers.get('x-api-key');
+    if (apiKey !== webhookSecret) {
+      console.warn('⛔ Webhook rejeitado: apikey inválida');
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+  }
+
   try {
     const body = await req.json();
     console.log('📨 Webhook:', JSON.stringify(body).slice(0, 200));
@@ -196,22 +206,4 @@ export async function POST(req: NextRequest) {
           type: 'AI_FAILED',
           severity: 'HIGH',
           title: 'Atena falhou em responder',
-          detail: `Erro: ${error instanceof Error ? error.message : 'desconhecido'}`,
-        },
-      });
-
-      return NextResponse.json({ ok: true, handled: 'fallback' });
-    }
-  } catch (error) {
-    console.error('❌ Erro fatal webhook:', error);
-    return NextResponse.json({ ok: false, error: 'internal' }, { status: 200 });
-  }
-}
-
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    service: 'coliseu-webhook',
-    timestamp: new Date().toISOString(),
-  });
-}
+          detail: `Erro: ${error instanceof Error ? error.message : 'desconhecido'}`,

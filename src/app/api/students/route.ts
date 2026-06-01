@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  try {
   const user = await requireAuth();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -14,9 +15,15 @@ export async function GET() {
   });
 
   return NextResponse.json(students);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ API Error:', msg);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const user = await requireAdmin();
   if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
@@ -41,9 +48,15 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json(student);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ API Error:', msg);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const user = await requireAdmin();
   if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
@@ -59,9 +72,15 @@ export async function PATCH(req: NextRequest) {
   });
 
   return NextResponse.json(student);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ API Error:', msg);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const user = await requireAdmin();
   if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
@@ -71,4 +90,9 @@ export async function DELETE(req: NextRequest) {
 
   await prisma.student.delete({ where: { id } });
   return NextResponse.json({ ok: true });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ API Error:', msg);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+  }
 }

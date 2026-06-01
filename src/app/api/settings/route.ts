@@ -9,13 +9,20 @@ import { requireAdmin } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  try {
   // Settings são públicas dentro do app (só admins editam, mas todos leem)
   const settings = await prisma.settings.findMany({ orderBy: { key: 'asc' } });
   const obj = Object.fromEntries(settings.map(s => [s.key, s.value]));
   return NextResponse.json(obj);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ API Error:', msg);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const user = await requireAdmin();
   if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
@@ -32,4 +39,9 @@ export async function PATCH(req: NextRequest) {
   );
 
   return NextResponse.json({ ok: true });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ API Error:', msg);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+  }
 }

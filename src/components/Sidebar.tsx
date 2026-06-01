@@ -63,6 +63,12 @@ const items: NavItem[] = [
     badgeKey: 'pending',
     adminOnly: true,
   },
+  {
+    href: '/configuracoes',
+    label: 'Memória da Atena',
+    icon: <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636-.707.707M21 12h-1M4 12H3m3.343-5.657-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>,
+    adminOnly: true,
+  },
 ];
 
 export function Sidebar() {
@@ -192,14 +198,4 @@ export function Sidebar() {
             </div>
           </div>
           <button
-            onClick={signOut}
-            className="p-1.5 rounded-lg hover:bg-[var(--surface)]"
-            title="Sair"
-          >
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1"/></svg>
-          </button>
-        </div>
-      </div>
-    </aside>
-  );
-}
+  

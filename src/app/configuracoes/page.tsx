@@ -13,6 +13,7 @@ interface Settings {
   capacity_crosstraining?: string;
   experimental_active?: string;
   ai_active?: string;
+  atena_notes?: string;
 }
 
 export default function ConfigPage() {
@@ -185,6 +186,20 @@ function ConfigContent() {
           </div>
         </Card>
 
+        {/* MEMÓRIA DA ATENA */}
+        <Card title="🧠 Memória da Atena">
+          <div className="flex flex-col gap-3">
+            <p className="text-sm" style={{ color: 'var(--text-2)' }}>
+              Adicione informações extras que a Atena deve sempre lembrar — promoções, avisos, regras especiais, datas importantes, etc.
+              Essas notas são incluídas em todas as conversas automaticamente.
+            </p>
+            <AtenaNotesEditor
+              value={form.atena_notes || ''}
+              onChange={v => handleChange('atena_notes', v)}
+            />
+          </div>
+        </Card>
+
         {/* IMPORTAR ALUNOS */}
         <Card title="📥 Importar Alunos via CSV">
           <ImportStudents />
@@ -312,6 +327,59 @@ function Toggle({
   );
 }
 
+function AtenaNotesEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const suggestions = [
+    'Gympass não é aceito',
+    'Promoção de matrícula grátis até o fim do mês',
+    'Academia fechada no feriado',
+    'Turma de CrossTraining lotada às 18h de terça',
+  ];
+
+  return (
+    <div>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={'Ex: Academia fechada no dia 20/06 por reforma. Promoção: matrícula grátis até sexta.'}
+        rows={4}
+        className="w-full px-3.5 py-2.5 rounded-xl text-sm resize-y"
+        style={{
+          background: 'var(--bg-2)',
+          border: '1px solid var(--border)',
+          color: 'var(--text)',
+          outline: 'none',
+          fontFamily: 'inherit',
+          lineHeight: '1.6',
+        }}
+      />
+      <div className="mt-2">
+        <p className="text-xs mb-2" style={{ color: 'var(--text-3)' }}>Sugestões rápidas:</p>
+        <div className="flex flex-wrap gap-2">
+          {suggestions.map(s => (
+            <button
+              key={s}
+              onClick={() => {
+                const newVal = value ? `${value}\n${s}` : s;
+                onChange(newVal);
+              }}
+              className="text-xs px-3 py-1 rounded-full transition-all"
+              style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+            >
+              + {s}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ImportStudents() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -364,50 +432,4 @@ function ImportStudents() {
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
-          <span className="text-sm">{file ? file.name : 'Selecionar arquivo CSV'}</span>
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={e => { setFile(e.target.files?.[0] || null); setResult(null); }}
-          />
-        </label>
-
-        <button
-          onClick={handleImport}
-          disabled={!file || uploading}
-          className="px-5 py-3 rounded-xl text-sm font-medium transition-all flex-shrink-0"
-          style={{
-            background: file && !uploading ? 'var(--accent)' : 'var(--surface-2)',
-            color: file && !uploading ? 'white' : 'var(--text-3)',
-            cursor: file && !uploading ? 'pointer' : 'not-allowed',
-          }}
-        >
-          {uploading ? 'Importando...' : 'Importar'}
-        </button>
-      </div>
-
-      {result && (
-        <div className="mt-4 rounded-xl p-4" style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.3)' }}>
-          <div className="text-sm font-medium mb-1" style={{ color: 'var(--success)' }}>
-            ✅ Importação concluída — {result.total} linhas lidas
-          </div>
-          <div className="text-xs" style={{ color: 'var(--text-2)' }}>
-            {result.created} criados · {result.skipped} ignorados (duplicados)
-          </div>
-          {result.errors.length > 0 && (
-            <div className="mt-2 text-xs" style={{ color: 'var(--danger)' }}>
-              Erros: {result.errors.join(' · ')}
-            </div>
-          )}
-        </div>
-      )}
-
-      {importError && (
-        <div className="mt-4 rounded-xl p-4 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)' }}>
-          ❌ {importError}
-        </div>
-      )}
-    </div>
-  );
-}
+          <span className="text-sm

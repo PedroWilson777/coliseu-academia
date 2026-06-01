@@ -23,49 +23,45 @@ export async function POST(
     return NextResponse.json({ error: 'pause IA antes' }, { status: 400 });
   }
 
-  const formData = await req.formData();
-  const audioFile = formData.get('audio') as File | null;
+  try {
+    const formData = await req.formData();
+    const audioFile = formData.get('audio') as File | null;
 
-  if (!audioFile) {
-    return NextResponse.json({ error: 'áudio não enviado' }, { status: 400 });
-  }
-
-  // Converte blob para base64
-  const arrayBuffer = await audioFile.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString('base64');
-
-  // Envia via Evolution API
-  const phone = conv.lead?.phone || conv.student?.phone;
-  if (phone) {
-    const sent = await sendWhatsAppAudio(phone, base64);
-    if (!sent) {
-      return NextResponse.json({ error: 'falha ao enviar áudio' }, { status: 500 });
+    if (!audioFile) {
+      return NextResponse.json({ error: 'áudio não enviado' }, { status: 400 });
     }
-  }
 
-  // Salva no banco (com base64 pra reproduzir no dashboard)
-  const mimeType = audioFile.type || 'audio/webm';
-  const audioDataUrl = `data:${mimeType};base64,${base64}`;
+    // Converte blob para base64
+    const arrayBuffer = await audioFile.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
 
-  const message = await prisma.message.create({
-    data: {
-      conversationId: params.id,
-      sender: 'HUMAN',
-      content: '[áudio]',
-      isAudio: true,
-      audioBase64: audioDataUrl,
-      authorName: user.name || user.email,
-    },
-  });
+    // Envia via Evolution API
+    const phone = conv.lead?.phone || conv.student?.phone;
+    if (phone) {
+      const sent = await sendWhatsAppAudio(phone, base64);
+      if (!sent) {
+        return NextResponse.json({ error: 'falha ao enviar áudio' }, { status: 500 });
+      }
+    }
 
-  await prisma.conversation.update({
-    where: { id: params.id },
-    data: {
-      status: 'HUMAN_ACTIVE',
-      lastMessageAt: new Date(),
-      assignedHuman: user.name || user.email,
-    },
-  });
+    // Salva no banco (com base64 pra reproduzir no dashboard)
+    const mimeType = audioFile.type || 'audio/webm';
+    const audioDataUrl = `data:${mimeType};base64,${base64}`;
 
-  return NextResponse.json({ ok: true, id: message.id });
-}
+    const message = await prisma.message.create({
+      data: {
+        conversationId: params.id,
+        sender: 'HUMAN',
+        content: '[áudio]',
+        isAudio: true,
+        audioBase64: audioDataUrl,
+        authorName: user.name || user.email,
+      },
+    });
+
+    await prisma.conversation.update({
+      where: { id: params.id },
+      data: {
+        status: 'HUMAN_ACTIVE',
+        lastMessageAt: new Date(),
+        assignedHuman: user.name || user.email,

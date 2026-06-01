@@ -103,6 +103,5 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-  await prisma.teacher.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
-}
+  // Remove appointments e schedules vinculados antes de deletar
+  await prisma.appointment.dele

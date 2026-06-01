@@ -207,6 +207,7 @@ model Student {
 
   conversations     Conversation[]
   appointments      Appointment[]
+  payments          Payment[]
 
   enrolledAt        DateTime        @default(now())
   createdAt         DateTime        @default(now())
@@ -214,6 +215,26 @@ model Student {
 
   @@index([phone])
   @@index([modality])
+}
+
+// Pagamento de mensalidade
+model Payment {
+  id              String    @id @default(cuid())
+  studentId       String
+  student         Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  amount          Int       // valor em centavos
+  referenceMonth  String    // "2026-05" (mês de referência)
+  paidAt          DateTime?
+  method          String?   // PIX, CARTAO, DINHEIRO, BOLETO
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([studentId, referenceMonth])
+  @@index([studentId])
+  @@index([referenceMonth])
 }
 
 // Conversa do WhatsApp

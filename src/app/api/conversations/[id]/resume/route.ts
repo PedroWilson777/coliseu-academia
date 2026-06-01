@@ -11,10 +11,10 @@ export async function POST(
   const user = await requireAuth();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const updated = await prisma.conversation.update({
-    where: { id: params.id },
-    data: { status: 'AI_ACTIVE', assignedHuman: null },
-  });
+  try {
+    const updated = await prisma.conversation.update({
+      where: { id: params.id },
+      data: { status: 'AI_ACTIVE', assignedHuman: null },
+    });
 
-  return NextResponse.json({ ok: true, status: updated.status });
-}
+    return NextResponse.json({ ok: true, status: upda

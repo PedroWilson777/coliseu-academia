@@ -11,13 +11,13 @@ export async function POST(
   const user = await requireAuth();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const updated = await prisma.conversation.update({
-    where: { id: params.id },
-    data: {
-      status: 'HUMAN_ACTIVE',
-      assignedHuman: user.name || user.email,
-    },
-  });
+  try {
+    const updated = await prisma.conversation.update({
+      where: { id: params.id },
+      data: {
+        status: 'HUMAN_ACTIVE',
+        assignedHuman: user.name || user.email,
+      },
+    });
 
-  return NextResponse.json({ ok: true, status: updated.status });
-}
+    return NextResponse.json({ ok: true, status

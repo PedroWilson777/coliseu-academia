@@ -22,6 +22,10 @@ export async function processMetaTags(
         await handleClosing(tag, leadId, conversationId);
       } else if (tag.type === 'ESCALAR') {
         await handleEscalation(tag, conversationId);
+      } else if (tag.type === 'ALUNO_EXISTENTE') {
+        await handleAlunoExistente(tag, leadId, conversationId);
+      } else if (tag.type === 'CANCELAR_AULA') {
+        await handleCancelarAula(leadId, conversationId);
       }
     } catch (error) {
       console.error(`❌ Erro META ${tag.type}:`, error);
@@ -30,7 +34,7 @@ export async function processMetaTags(
 }
 
 async function handleExperimental(tag: MetaTag, leadId: string) {
-  const { modalidade, data, hora } = tag.params;
+  const { modalidade, data, hora, acompanhantes } = tag.params;
   if (!modalidade || !data || !hora) return;
 
   const modalityMap: Record<string, Modality> = {
@@ -54,6 +58,11 @@ async function handleExperimental(tag: MetaTag, leadId: string) {
     return;
   }
 
+  const numAcompanhantes = parseInt(acompanhantes || '0', 10) || 0;
+  const notesText = numAcompanhantes > 0
+    ? `Acompanhantes: ${numAcompanhantes} pessoa(s)`
+    : undefined;
+
   await prisma.appointment.create({
     data: {
       leadId,
@@ -62,6 +71,7 @@ async function handleExperimental(tag: MetaTag, leadId: string) {
       scheduledAt,
       type: 'EXPERIMENTAL',
       status: 'SCHEDULED',
+      notes: notesText,
     },
   });
 
@@ -171,20 +181,4 @@ async function handleEscalation(tag: MetaTag, conversationId: string) {
 
   await prisma.conversation.update({
     where: { id: conversationId },
-    data: { status: 'WAITING_HUMAN' },
-  });
-
-  const personName = conv.lead?.name || conv.student?.name || 'Cliente';
-
-  await prisma.supervisorNotification.create({
-    data: {
-      conversationId,
-      type: 'ESCALATION',
-      severity: validSev as 'HIGH' | 'MEDIUM' | 'LOW',
-      title: `${personName} precisa de atendimento`,
-      detail: motivo || 'Atena escalou esta conversa',
-    },
-  });
-
-  console.log(`🚨 Escalado: ${motivo}`);
-}
+    dat

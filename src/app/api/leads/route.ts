@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  try {
   const user = await requireAuth();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -28,9 +29,15 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json(leads);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ API Error:', msg);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const user = await requireAuth();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -48,4 +55,9 @@ export async function PATCH(req: NextRequest) {
   });
 
   return NextResponse.json(updated);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ API Error:', msg);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+  }
 }
