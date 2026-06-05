@@ -21,12 +21,12 @@ function LoadingScreen() {
 }
 
 // Converte username → email interno
-// Ex: "jordancoliseu" → "jordancoliseu@orkstra.com"
+// Ex: "jordancoliseu" → "jordancoliseu@closefit.com"
 // Ex: "pedro@gmail.com" → "pedro@gmail.com" (admin)
 function toEmail(username: string): string {
   const trimmed = username.trim().toLowerCase();
   if (trimmed.includes('@')) return trimmed;
-  return `${trimmed}@orkstra.com`;
+  return `${trimmed}@closefit.com`;
 }
 
 function LoginContent() {
@@ -37,7 +37,6 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Se já está logado, redireciona
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data }) => {
@@ -79,7 +78,6 @@ function LoginContent() {
       }}
     >
       <div className="w-full max-w-md text-center">
-        {/* Logo */}
         <div className="mb-8 flex justify-center">
           <div
             className="w-20 h-20 rounded-full grid place-items-center"
