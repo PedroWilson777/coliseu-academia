@@ -206,4 +206,22 @@ export async function POST(req: NextRequest) {
           type: 'AI_FAILED',
           severity: 'HIGH',
           title: 'Atena falhou em responder',
-          detail: `Erro: ${error instanceof Error ? error.message : 'desconhecido'}`,
+          detail: `Erro: ${error instanceof Error ? error.message : 'desconhecido'}`,
+        },
+      });
+
+      return NextResponse.json({ ok: true, handled: 'fallback' });
+    }
+  } catch (error) {
+    console.error('❌ Erro fatal webhook:', error);
+    return NextResponse.json({ ok: false, error: 'internal' }, { status: 200 });
+  }
+}
+
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    service: 'coliseu-webhook',
+    timestamp: new Date().toISOString(),
+  });
+}

@@ -46,4 +46,11 @@ export async function POST(
     });
 
     const phone = conv.lead?.phone || conv.student?.phone;
-    if (phone) await sendWhatsAppMessage(phone, content.trim());
+    if (phone) await sendWhatsAppMessage(phone, content.trim());
+
+    return NextResponse.json({ ok: true, id: message.id });
+  } catch (e) {
+    console.error('POST /conversations/[id]/messages:', e);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}

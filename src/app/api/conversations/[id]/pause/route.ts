@@ -20,4 +20,9 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({ ok: true, status
+    return NextResponse.json({ ok: true, status: updated.status });
+  } catch (e) {
+    console.error('POST /conversations/[id]/pause:', e);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}

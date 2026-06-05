@@ -65,3 +65,12 @@ export async function POST(
         status: 'HUMAN_ACTIVE',
         lastMessageAt: new Date(),
         assignedHuman: user.name || user.email,
+      },
+    });
+
+    return NextResponse.json({ ok: true, id: message.id });
+  } catch (e) {
+    console.error('POST /conversations/[id]/audio:', e);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}

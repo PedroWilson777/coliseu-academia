@@ -14,3 +14,10 @@ export async function GET() {
     return NextResponse.json({
       authenticated: true,
       isAdmin: isAdminEmail(user.email),
+      user,
+    });
+  } catch (e) {
+    console.error('GET /me:', e);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}

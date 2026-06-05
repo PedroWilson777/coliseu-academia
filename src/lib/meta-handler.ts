@@ -181,4 +181,88 @@ async function handleEscalation(tag: MetaTag, conversationId: string) {
 
   await prisma.conversation.update({
     where: { id: conversationId },
-    dat
+    data: { status: 'WAITING_HUMAN' },
+  });
+
+  const personName = conv.lead?.name || conv.student?.name || 'Cliente';
+
+  await prisma.supervisorNotification.create({
+    data: {
+      conversationId,
+      type: 'ESCALATION',
+      severity: validSev as 'HIGH' | 'MEDIUM' | 'LOW',
+      title: `${personName} precisa de atendimento`,
+      detail: motivo || 'Atena escalou esta conversa',
+    },
+  });
+
+  console.log(`🚨 Escalado: ${motivo}`);
+}
+
+async function handleAlunoExistente(tag: MetaTag, leadId: string, conversationId: string) {
+  const { nome } = tag.params;
+
+  // Marca o lead como possível aluno existente que não está no sistema
+  await prisma.lead.update({
+    where: { id: leadId },
+    data: {
+      notes: `⚠️ Cliente informou que já é aluno — verificar cadastro`,
+      qualification: 'WARM',
+    },
+  }).catch(() => {}); // ignora se lead não existe
+
+  // Escala pro humano verificar
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { status: 'WAITING_HUMAN' },
+  });
+
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: { lead: true },
+  });
+
+  await prisma.supervisorNotification.create({
+    data: {
+      conversationId,
+      type: 'ESCALATION',
+      severity: 'MEDIUM',
+      title: `${nome || conv?.lead?.name || 'Cliente'} diz que já é aluno`,
+      detail: `Pessoa informou que já é aluno mas não está cadastrada no sistema. Verificar matrícula e cadastrar se necessário.`,
+    },
+  });
+
+  console.log(`👤 Possível aluno não cadastrado: ${nome || 'sem nome'}`);
+}
+
+async function handleCancelarAula(leadId: string, conversationId: string) {
+  const now = new Date();
+
+  // Cancela o próximo agendamento futuro do lead
+  const appointment = await prisma.appointment.findFirst({
+    where: {
+      leadId,
+      scheduledAt: { gte: now },
+      status: { in: ['SCHEDULED', 'CONFIRMED'] },
+    },
+    orderBy: { scheduledAt: 'asc' },
+  });
+
+  if (!appointment) {
+    console.log('⚠️ Nenhum agendamento futuro encontrado para cancelar');
+    return;
+  }
+
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: { status: 'CANCELLED' },
+  });
+
+  // Volta o lead pra QUALIFIED (ainda tem interesse, só cancelou a aula)
+  await prisma.lead.update({
+    where: { id: leadId },
+    data: { stage: 'QUALIFIED' },
+  }).catch(() => {});
+
+  console.log(`❌ Aula cancelada: ${appointment.id} (${appointment.modality} ${appointment.scheduledAt.toLocaleString('pt-BR')})`);
+}

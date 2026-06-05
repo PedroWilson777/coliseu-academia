@@ -17,4 +17,9 @@ export async function POST(
       data: { status: 'AI_ACTIVE', assignedHuman: null },
     });
 
-    return NextResponse.json({ ok: true, status: upda
+    return NextResponse.json({ ok: true, status: updated.status });
+  } catch (e) {
+    console.error('POST /conversations/[id]/resume:', e);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}

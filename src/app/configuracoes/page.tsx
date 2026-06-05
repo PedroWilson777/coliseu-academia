@@ -432,4 +432,50 @@ function ImportStudents() {
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
-          <span className="text-sm
+          <span className="text-sm">{file ? file.name : 'Selecionar arquivo CSV'}</span>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={e => { setFile(e.target.files?.[0] || null); setResult(null); }}
+          />
+        </label>
+
+        <button
+          onClick={handleImport}
+          disabled={!file || uploading}
+          className="px-5 py-3 rounded-xl text-sm font-medium transition-all flex-shrink-0"
+          style={{
+            background: file && !uploading ? 'var(--accent)' : 'var(--surface-2)',
+            color: file && !uploading ? 'white' : 'var(--text-3)',
+            cursor: file && !uploading ? 'pointer' : 'not-allowed',
+          }}
+        >
+          {uploading ? 'Importando...' : 'Importar'}
+        </button>
+      </div>
+
+      {result && (
+        <div className="mt-4 rounded-xl p-4" style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.3)' }}>
+          <div className="text-sm font-medium mb-1" style={{ color: 'var(--success)' }}>
+            ✅ Importação concluída — {result.total} linhas lidas
+          </div>
+          <div className="text-xs" style={{ color: 'var(--text-2)' }}>
+            {result.created} criados · {result.skipped} ignorados (duplicados)
+          </div>
+          {result.errors.length > 0 && (
+            <div className="mt-2 text-xs" style={{ color: 'var(--danger)' }}>
+              Erros: {result.errors.join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {importError && (
+        <div className="mt-4 rounded-xl p-4 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)' }}>
+          ❌ {importError}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 
 export default function LoginPage() {
@@ -20,46 +20,55 @@ function LoadingScreen() {
   );
 }
 
+// Converte username → email interno
+// Ex: "jordancoliseu" → "jordancoliseu@orkstra.com"
+// Ex: "pedro@gmail.com" → "pedro@gmail.com" (admin)
+function toEmail(username: string): string {
+  const trimmed = username.trim().toLowerCase();
+  if (trimmed.includes('@')) return trimmed;
+  return `${trimmed}@orkstra.com`;
+}
+
 function LoginContent() {
-  const params = useSearchParams();
   const router = useRouter();
-  const errorParam = params.get('error');
 
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(errorParam);
+  const [error, setError] = useState<string | null>(null);
 
+  // Se já está logado, redireciona
   useEffect(() => {
-    if (errorParam) {
-      setError(decodeURIComponent(errorParam));
-    }
-  }, [errorParam]);
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) router.replace('/');
+    });
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || loading) return;
+    if (!username.trim() || !password || loading) return;
 
     setLoading(true);
     setError(null);
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const email = toEmail(username);
     const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: {
-        shouldCreateUser: true,
-      },
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
 
     setLoading(false);
 
     if (signInError) {
-      console.error(signInError);
-      setError(signInError.message);
+      setError('Usuário ou senha incorretos.');
       return;
     }
 
-    router.push(`/login/code?email=${encodeURIComponent(normalizedEmail)}`);
+    router.push('/');
+    router.refresh();
   };
 
   return (
@@ -100,19 +109,37 @@ function LoginContent() {
         >
           <h2 className="font-display text-2xl mb-2">Acesso restrito</h2>
           <p className="text-sm mb-6" style={{ color: 'var(--text-2)' }}>
-            Digite seu email pra receber um código de acesso
+            Entre com seu usuário e senha
           </p>
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="seu@email.com"
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="Usuário (ex: jordancoliseu)"
               required
               autoFocus
+              autoComplete="username"
               disabled={loading}
-              className="w-full px-4 py-3 rounded-xl text-sm mb-4"
+              className="w-full px-4 py-3 rounded-xl text-sm"
+              style={{
+                background: 'var(--bg-2)',
+                border: '1px solid var(--border)',
+                color: 'var(--text)',
+                outline: 'none',
+              }}
+            />
+
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Senha"
+              required
+              autoComplete="current-password"
+              disabled={loading}
+              className="w-full px-4 py-3 rounded-xl text-sm"
               style={{
                 background: 'var(--bg-2)',
                 border: '1px solid var(--border)',
@@ -123,16 +150,16 @@ function LoginContent() {
 
             <button
               type="submit"
-              disabled={loading || !email.trim()}
-              className="w-full px-6 py-3 rounded-xl font-medium transition-all"
+              disabled={loading || !username.trim() || !password}
+              className="w-full px-6 py-3 rounded-xl font-medium transition-all mt-1"
               style={{
                 background: loading ? 'var(--surface-2)' : 'var(--accent)',
                 color: 'white',
-                opacity: loading || !email.trim() ? 0.6 : 1,
-                cursor: loading || !email.trim() ? 'not-allowed' : 'pointer',
+                opacity: loading || !username.trim() || !password ? 0.6 : 1,
+                cursor: loading || !username.trim() || !password ? 'not-allowed' : 'pointer',
               }}
             >
-              {loading ? 'Enviando...' : '📧 Receber código de acesso'}
+              {loading ? 'Entrando...' : '🏛️ Entrar'}
             </button>
           </form>
 
@@ -143,7 +170,7 @@ function LoginContent() {
           )}
 
           <div className="mt-6 text-xs" style={{ color: 'var(--text-3)' }}>
-            Apenas admins e professores cadastrados<br/>têm acesso ao sistema
+            Apenas equipe autorizada tem acesso
           </div>
         </div>
 

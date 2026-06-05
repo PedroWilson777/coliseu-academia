@@ -84,4 +84,16 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
     if (!conv) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
     // Apaga a conversa (mensagens e notificações caem em cascade)
-    await prisma.conversation.delete({ where: { id:
+    await prisma.conversation.delete({ where: { id: params.id } });
+
+    // Se era lead e não tem outras conversas, apaga o lead também
+    if (conv.lead && conv.lead.conversations.length <= 1) {
+      await prisma.lead.delete({ where: { id: conv.lead.id } }).catch(() => null);
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /conversations/[id]:', e);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}

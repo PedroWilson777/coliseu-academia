@@ -31,9 +31,10 @@ export interface AuthUser {
  */
 export async function getCurrentUser(): Promise<AuthUser | null> {
   const supabase = createClient();
-  const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+  const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser();
 
-  if (!supabaseUser?.email) return null;
+  // AuthApiError (ex: refresh token inválido) → retorna null sem logar como erro
+  if (authError || !supabaseUser?.email) return null;
 
   const email = supabaseUser.email.toLowerCase();
   const isAdmin = isAdminEmail(email);

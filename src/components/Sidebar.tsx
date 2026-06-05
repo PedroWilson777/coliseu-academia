@@ -99,8 +99,7 @@ export function Sidebar() {
   const visibleItems = items.filter(i => !i.adminOnly || isAdmin);
 
   return (
-    <aside
-      className="flex flex-col p-6 pt-7 pb-5 relative h-screen"
+    <aside className="flex flex-col p-6 pt-7 pb-5 relative h-screen"
       style={{ background: 'var(--bg-2)', borderRight: '1px solid var(--border)', width: 260 }}
     >
       <div className="pb-6 mb-4" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -198,4 +197,14 @@ export function Sidebar() {
             </div>
           </div>
           <button
-  
+            onClick={signOut}
+            className="p-1.5 rounded-lg hover:bg-[var(--surface)]"
+            title="Sair"
+          >
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}

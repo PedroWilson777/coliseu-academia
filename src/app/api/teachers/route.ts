@@ -54,20 +54,30 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // 3. Tenta enviar Magic Link de convite via Supabase Admin
-  // Se falhar, não bloqueia (admin pode pedir pro professor entrar manualmente depois)
+  // 3. Cria usuário no Supabase Auth com senha fixa (sem enviar email)
   try {
     const supabase = createAdminClient();
-    const appUrl = process.env.APP_URL || '';
 
-    await supabase.auth.admin.inviteUserByEmail(cleanEmail, {
-      redirectTo: `${appUrl}/auth/callback`,
-      data: { name, role: 'TEACHER' },
+    // Tenta criar; se já existir, atualiza a senha
+    const { error: createError } = await supabase.auth.admin.createUser({
+      email: cleanEmail,
+      password: 'coliseu2026',
+      email_confirm: true,
+      user_metadata: { name, role: 'TEACHER' },
     });
 
-    console.log(`✉️  Convite enviado pra ${cleanEmail}`);
+    if (createError && createError.message.includes('already been registered')) {
+      // Usuário já existe — busca pelo email e atualiza a senha
+      const { data: listData } = await supabase.auth.admin.listUsers();
+      const existing = listData?.users?.find(u => u.email === cleanEmail);
+      if (existing) {
+        await supabase.auth.admin.updateUserById(existing.id, { password: 'coliseu2026' });
+      }
+    }
+
+    console.log(`🔑 Usuário Supabase criado/atualizado para ${cleanEmail}`);
   } catch (error) {
-    console.error('⚠️  Falhou enviar convite (não bloqueia):', error);
+    console.error('⚠️  Falhou criar usuário Supabase (não bloqueia):', error);
   }
 
   return NextResponse.json({ ok: true, teacher });
@@ -104,4 +114,8 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   // Remove appointments e schedules vinculados antes de deletar
-  await prisma.appointment.dele
+  await prisma.appointment.deleteMany({ where: { teacherId: id } });
+  await prisma.teacherSchedule.deleteMany({ where: { teacherId: id } });
+  await prisma.teacher.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}
