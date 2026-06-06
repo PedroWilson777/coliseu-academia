@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
 import type { ConvListItem, ConvDetail } from './chat-types';
@@ -11,8 +11,22 @@ import { LeadPanel } from './LeadPanel';
 export default function ChatClient() {
   return (
     <AppShell>
-      <ChatContent />
+      <Suspense fallback={<ChatSkeleton />}>
+        <ChatContent />
+      </Suspense>
     </AppShell>
+  );
+}
+
+function ChatSkeleton() {
+  return (
+    <div className="grid h-screen" style={{ gridTemplateColumns: '320px 1fr 300px', background: 'var(--bg)' }}>
+      <div style={{ background: 'var(--bg-2)', borderRight: '1px solid var(--border)' }} />
+      <div className="grid place-items-center" style={{ color: 'var(--text-3)' }}>
+        <div className="w-8 h-8 rounded-full animate-pulse" style={{ background: 'var(--accent-soft)' }} />
+      </div>
+      <div style={{ background: 'var(--bg-2)', borderLeft: '1px solid var(--border)' }} />
+    </div>
   );
 }
 
