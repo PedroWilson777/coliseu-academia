@@ -13,15 +13,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
-  // Verifica secret do webhook (proteção contra requests externos)
-  const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
-  if (webhookSecret) {
-    const apiKey = req.headers.get('apikey') || req.headers.get('x-api-key');
-    if (apiKey !== webhookSecret) {
-      console.warn('⛔ Webhook rejeitado: apikey inválida');
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    }
-  }
+  // Webhook aceita todos os requests da Evolution API
+  // (Evolution API v2 não envia apikey header por padrão nos webhooks)
 
   try {
     const body = await req.json();
