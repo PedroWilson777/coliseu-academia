@@ -21,12 +21,12 @@ function LoadingScreen() {
 }
 
 // Converte username → email interno
-// Ex: "jordancoliseu" → "jordancoliseu@orkstra.com"
+// Ex: "jordancoliseu" → "jordancoliseu@closefit.com"
 // Ex: "pedro@gmail.com" → "pedro@gmail.com" (admin)
 function toEmail(username: string): string {
   const trimmed = username.trim().toLowerCase();
   if (trimmed.includes('@')) return trimmed;
-  return `${trimmed}@orkstra.com`;
+  return `${trimmed}@closefit.com`;
 }
 
 function LoginContent() {
