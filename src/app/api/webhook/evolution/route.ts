@@ -13,208 +13,136 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
-  // Webhook aceita todos os requests da Evolution API
-  // (Evolution API v2 não envia apikey header por padrão nos webhooks)
+  const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
+  if (webhookSecret) {
+    const apiKey = req.headers.get('apikey') || req.headers.get('x-api-key');
+    if (apiKey !== webhookSecret) {
+      console.warn('Webhook rejeitado: apikey invalida');
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+  }
 
   try {
     const body = await req.json();
-    console.log('📨 Webhook:', JSON.stringify(body).slice(0, 200));
-
+    console.log('Webhook recebido:', JSON.stringify(body).slice(0, 200));
     if (body?.event !== 'messages.upsert') {
       return NextResponse.json({ ok: true, ignored: body?.event });
     }
-
     const data = body?.data;
     if (!data) return NextResponse.json({ ok: true });
-
-    if (data?.key?.fromMe === true) {
-      return NextResponse.json({ ok: true, ignored: 'fromMe' });
-    }
-
+    if (data?.key?.fromMe === true) return NextResponse.json({ ok: true, ignored: 'fromMe' });
     const remoteJid = data?.key?.remoteJid;
     const messageId = data?.key?.id;
     if (!remoteJid) return NextResponse.json({ ok: true });
-
-    if (remoteJid.includes('@g.us')) {
-      return NextResponse.json({ ok: true, ignored: 'group' });
-    }
+    if (remoteJid.includes('@g.us')) return NextResponse.json({ ok: true, ignored: 'group' });
 
     const phone = remoteJid.split('@')[0];
     const pushName = data?.pushName || null;
 
-    // ============== EXTRAÇÃO DE TEXTO OU ÁUDIO ==============
-    let messageText =
-      data?.message?.conversation ||
-      data?.message?.extendedTextMessage?.text ||
-      data?.message?.imageMessage?.caption ||
-      '';
-
+    let messageText = data?.message?.conversation || data?.message?.extendedTextMessage?.text || data?.message?.imageMessage?.caption || '';
     let isAudio = false;
     let audioTranscript = '';
     let audioBase64: string | null = null;
 
-    // Áudio
     if (data?.message?.audioMessage) {
       isAudio = true;
-      console.log('🎤 Mensagem de áudio detectada, transcrevendo...');
-
       const media = await downloadWhatsAppMedia(messageId);
       if (media?.base64) {
-        audioBase64 = `data:${media.mimetype || 'audio/ogg'};base64,${media.base64}`;
+        audioBase64 = 'data:' + (media.mimetype || 'audio/ogg') + ';base64,' + media.base64;
         audioTranscript = await transcribeAudioFromBase64(media.base64);
-        messageText = audioTranscript || '[áudio sem transcrição]';
-        console.log(`🎤 Transcrito: "${audioTranscript.slice(0, 80)}..."`);
+        messageText = audioTranscript || '[audio sem transcricao]';
       }
     }
 
-    if (!messageText) {
-      return NextResponse.json({ ok: true, ignored: 'no content' });
-    }
+    if (!messageText) return NextResponse.json({ ok: true, ignored: 'no content' });
 
-    // Idempotência
     if (messageId) {
-      const existing = await prisma.message.findUnique({
-        where: { whatsappMessageId: messageId },
-      });
+      const existing = await prisma.message.findUnique({ where: { whatsappMessageId: messageId } });
       if (existing) return NextResponse.json({ ok: true, ignored: 'duplicate' });
     }
 
-    // ============== IDENTIFICAÇÃO: ALUNO OU LEAD? ==============
     const identity = await identifyByPhone(phone, pushName);
     const conversation = await getOrCreateConversation(identity);
 
-    // Salva mensagem do cliente
     await prisma.message.create({
       data: {
-        conversationId: conversation.id,
-        sender: 'CLIENT',
-        content: messageText,
-        whatsappMessageId: messageId || null,
-        isAudio,
-        audioTranscript: audioTranscript || null,
-        audioBase64: audioBase64 || null,
+        conversationId: conversation.id, sender: 'CLIENT', content: messageText,
+        whatsappMessageId: messageId || null, isAudio,
+        audioTranscript: audioTranscript || null, audioBase64: audioBase64 || null,
       },
     });
 
     await prisma.conversation.update({
       where: { id: conversation.id },
-      data: {
-        lastMessageAt: new Date(),
-        unreadCount: { increment: 1 },
-      },
+      data: { lastMessageAt: new Date(), unreadCount: { increment: 1 } },
     });
 
-    // ============== HUMANO TÁ ATENDENDO? ==============
-    if (conversation.status === 'HUMAN_ACTIVE') {
-      console.log('🙋 Humano atendendo, Atena não responde');
-      return NextResponse.json({ ok: true, handled: 'human' });
-    }
+    if (conversation.status === 'HUMAN_ACTIVE') return NextResponse.json({ ok: true, handled: 'human' });
+    if (conversation.status === 'WAITING_HUMAN') return NextResponse.json({ ok: true, handled: 'waiting' });
 
-    if (conversation.status === 'WAITING_HUMAN') {
-      console.log('⏳ Aguardando humano');
-      return NextResponse.json({ ok: true, handled: 'waiting' });
-    }
-
-    // ============== REGRA: ATENA SÓ ATENDE LEADS, NÃO ALUNOS ==============
     if (identity.type === 'STUDENT') {
-      console.log(`👤 Aluno ${identity.student.name} mandou mensagem - escalando pro humano sem resposta`);
-
-      await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { status: 'WAITING_HUMAN' },
-      });
-
-      // Notifica supervisor (só uma vez por conversa pra não ficar spammando)
+      await prisma.conversation.update({ where: { id: conversation.id }, data: { status: 'WAITING_HUMAN' } });
       const existingNotif = await prisma.supervisorNotification.findFirst({
-        where: {
-          conversationId: conversation.id,
-          type: 'ESCALATION',
-          resolvedAt: null,
-        },
+        where: { conversationId: conversation.id, type: 'ESCALATION', resolvedAt: null },
       });
-
       if (!existingNotif) {
         await prisma.supervisorNotification.create({
           data: {
-            conversationId: conversation.id,
-            type: 'ESCALATION',
-            severity: 'MEDIUM',
-            title: `${identity.student.name} (aluno) precisa de atendimento`,
-            detail: `Aluno cadastrado mandou mensagem. Atena não responde alunos - assumir manualmente.`,
+            conversationId: conversation.id, type: 'ESCALATION', severity: 'MEDIUM',
+            title: identity.student.name + ' (aluno) precisa de atendimento',
+            detail: 'Aluno cadastrado mandou mensagem. Atena nao responde alunos - assumir manualmente.',
           },
         });
       }
-
       return NextResponse.json({ ok: true, handled: 'student-no-reply' });
     }
 
-    // ============== ATENA RESPONDE (só pra LEAD) ==============
     try {
       const atena = await askAtena(conversation.id, false, undefined);
-
-      // Salva resposta
       await prisma.message.create({
         data: {
-          conversationId: conversation.id,
-          sender: 'AI',
-          content: atena.text,
+          conversationId: conversation.id, sender: 'AI', content: atena.text,
           metaTags: atena.metaTags.length > 0 ? JSON.parse(JSON.stringify(atena.metaTags)) : undefined,
         },
       });
-
-      // Processa META tags (sempre lead aqui, alunos não chegam nesse ponto)
       if (atena.metaTags.length > 0) {
         const appUrl = process.env.APP_URL || process.env.NEXTAUTH_URL || '';
-        await processMetaTags(
-          atena.metaTags,
-          conversation.id,
-          identity.lead.id,
-          phone,
-          appUrl
-        );
+        await processMetaTags(atena.metaTags, conversation.id, identity.lead.id, phone, appUrl);
       }
-
-      // Envia texto da resposta
       if (atena.text) {
-        await sendWhatsAppMessage(phone, atena.text);
+        const sent = await sendWhatsAppMessage(phone, atena.text);
+        if (!sent) {
+          console.error('FALHA ao entregar Atena para ' + phone);
+          await prisma.supervisorNotification.create({
+            data: {
+              conversationId: conversation.id, type: 'AI_FAILED', severity: 'HIGH',
+              title: 'Falha ao enviar mensagem para o lead',
+              detail: 'Atena gerou resposta mas Evolution nao conseguiu entregar para ' + phone + '.',
+            },
+          });
+        }
       }
-
-      await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { lastMessageAt: new Date() },
-      });
-
+      await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
       return NextResponse.json({ ok: true, handled: 'atena' });
     } catch (error) {
-      console.error('❌ Erro Atena:', error);
-
-      const fallback =
-        'Oi! Recebi sua mensagem 🙏 Estou com uma instabilidade momentânea, em breve te respondo.';
-
+      console.error('Erro Atena:', error);
+      const fallback = 'Oi! Recebi sua mensagem. Estou com uma instabilidade momentanea, em breve te respondo.';
       await sendWhatsAppMessage(phone, fallback);
-
       await prisma.supervisorNotification.create({
         data: {
-          conversationId: conversation.id,
-          type: 'AI_FAILED',
-          severity: 'HIGH',
+          conversationId: conversation.id, type: 'AI_FAILED', severity: 'HIGH',
           title: 'Atena falhou em responder',
-          detail: `Erro: ${error instanceof Error ? error.message : 'desconhecido'}`,
+          detail: 'Erro: ' + (error instanceof Error ? error.message : 'desconhecido'),
         },
       });
-
       return NextResponse.json({ ok: true, handled: 'fallback' });
     }
   } catch (error) {
-    console.error('❌ Erro fatal webhook:', error);
+    console.error('Erro fatal webhook:', error);
     return NextResponse.json({ ok: false, error: 'internal' }, { status: 200 });
   }
 }
 
 export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    service: 'coliseu-webhook',
-    timestamp: new Date().toISOString(),
-  });
+  return NextResponse.json({ ok: true, service: 'coliseu-webhook', timestamp: new Date().toISOString() });
 }
