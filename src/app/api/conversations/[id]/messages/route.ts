@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { sendWhatsAppMessage } from '@/lib/evolution';
+import { sendWhatsAppMessage, normalizePhone } from '@/lib/evolution';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,8 +45,19 @@ export async function POST(
       },
     });
 
-    const phone = conv.lead?.phone || conv.student?.phone;
-    if (phone) await sendWhatsAppMessage(phone, content.trim());
+    const rawPhone = conv.lead?.phone || conv.student?.phone;
+    if (rawPhone) {
+      const phone = normalizePhone(rawPhone);
+      const sent = await sendWhatsAppMessage(phone, content.trim());
+      if (!sent) {
+        const errMsg = 'Falha ao enviar para ' + phone + ' (conversa ' + params.id + ')';
+        console.error(errMsg);
+        return NextResponse.json(
+          { error: 'Mensagem salva mas falha ao entregar no WhatsApp. Verifique o numero.' },
+          { status: 207 }
+        );
+      }
+    }
 
     return NextResponse.json({ ok: true, id: message.id });
   } catch (e) {
