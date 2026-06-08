@@ -14,4 +14,4 @@ cmds = ["npm ci"]
 cmds = ["npm run build"]
 
 [start]
-cmd = "npm run start"
+cmd = "npx prisma db push --accept-data-loss && npx prisma db seed && npm run start"
