@@ -203,3 +203,12 @@ function ChatContent() {
         onSend={handleSend}
         onPause={handlePause}
         
+        onResume={handleResume}
+        onDelete={handleDelete}
+        onStartRecording={iniciarGravacao}
+        onStopRecording={pararGravacao}
+      />
+      <LeadPanel conv={activeConv} />
+    </div>
+  );
+}
