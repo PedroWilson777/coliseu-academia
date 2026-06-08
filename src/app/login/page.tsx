@@ -180,4 +180,3 @@ function LoginContent() {
       </div>
     </div>
   );
-}

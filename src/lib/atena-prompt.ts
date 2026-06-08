@@ -9,15 +9,112 @@ type AcademyContext = {
   plans: Awaited<ReturnType<typeof prisma.plan.findMany>>;
   teachers: Awaited<ReturnType<typeof prisma.teacher.findMany>>;
   today: string;
+  availableSlots: Record<string, string>;
 };
 
-// ── Busca dados do banco (chamada única, cacheável no futuro) ──────────────────
+// ── Definição dos slots experimentais e suas capacidades ─────────────────────
+
+type SlotDef = { weekdays: number[]; hour: number; capacity: number };
+
+// weekdays: 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex
+const SLOT_DEFS: Record<string, SlotDef[]> = {
+  CROSSTRAINING: [
+    { weekdays: [1,2,3,4,5], hour: 7,  capacity: 2 },
+    { weekdays: [1,2,3,4,5], hour: 8,  capacity: 2 },
+    { weekdays: [1,2,3,4,5], hour: 11, capacity: 2 },
+    { weekdays: [1,2,3,4,5], hour: 16, capacity: 2 },
+    { weekdays: [1,2,3,4,5], hour: 17, capacity: 2 },
+    { weekdays: [1,2,3,4,5], hour: 20, capacity: 2 },
+  ],
+  MUSCULACAO: [
+    { weekdays: [1,2,3,4,5], hour: 7,  capacity: 1 },
+    { weekdays: [1,2,3,4,5], hour: 8,  capacity: 2 },
+    { weekdays: [1,2,3,4,5], hour: 15, capacity: 2 },
+    { weekdays: [2,4],       hour: 17, capacity: 2 },
+    { weekdays: [2,4],       hour: 18, capacity: 3 },
+    { weekdays: [2,4],       hour: 19, capacity: 3 },
+  ],
+  PILATES: [
+    { weekdays: [1,3,5], hour: 8,  capacity: 3 },
+    { weekdays: [2,4],   hour: 8,  capacity: 4 },
+    { weekdays: [1,2,3,4,5], hour: 9,  capacity: 4 },
+    { weekdays: [1,2,3,4,5], hour: 10, capacity: 4 },
+    { weekdays: [2,4],       hour: 19, capacity: 1 },
+  ],
+};
+
+// ── Calcula vagas reais consultando agendamentos futuros ──────────────────────
+
+async function fetchAvailableSlots(): Promise<Record<string, string>> {
+  const now = new Date();
+  const until = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // próximos 14 dias
+
+  const booked = await prisma.appointment.findMany({
+    where: {
+      scheduledAt: { gte: now, lte: until },
+      type: 'EXPERIMENTAL',
+      status: { in: ['SCHEDULED', 'CONFIRMED'] },
+    },
+    select: { scheduledAt: true, modality: true },
+  });
+
+  // Conta agendamentos por chave "MODALITY_weekday_hour"
+  const counts: Record<string, number> = {};
+  for (const appt of booked) {
+    // Converte para horário de Brasília (UTC-3)
+    const d = new Date(appt.scheduledAt);
+    const brHour = ((d.getUTCHours() - 3) + 24) % 24;
+    // getDay() no UTC ajustado
+    const brDate = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+    const wd = brDate.getUTCDay(); // 0=Dom, 1=Seg...5=Sex
+    const key = appt.modality + '_' + wd + '_' + brHour;
+    counts[key] = (counts[key] || 0) + 1;
+  }
+
+  const dayShort = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+  const result: Record<string, string> = {};
+
+  for (const [modality, slots] of Object.entries(SLOT_DEFS)) {
+    // Agrupa por hora para exibir de forma limpa
+    const byHour: Record<number, string[]> = {};
+
+    for (const slot of slots) {
+      for (const wd of slot.weekdays) {
+        const key = modality + '_' + wd + '_' + slot.hour;
+        const bookedCount = counts[key] || 0;
+        const remaining = slot.capacity - bookedCount;
+        if (remaining > 0) {
+          if (!byHour[slot.hour]) byHour[slot.hour] = [];
+          const vagaStr = remaining === 1 ? '1 vaga' : remaining + ' vagas';
+          byHour[slot.hour].push(dayShort[wd] + '(' + vagaStr + ')');
+        }
+      }
+    }
+
+    const lines = (Object.keys(byHour) as unknown as number[])
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map(h => {
+        const hStr = String(h).padStart(2, '0') + ':00';
+        return '- ' + hStr + ': ' + byHour[h].join(', ');
+      });
+
+    result[modality] = lines.length > 0
+      ? lines.join('\n')
+      : 'Sem vagas disponiveis no momento — cliente deve contatar humano para verificar.';
+  }
+
+  return result;
+}
+
+// ── Busca dados do banco ──────────────────────────────────────────────────────
 
 export async function fetchAcademyContext(): Promise<AcademyContext> {
-  const [plans, settings, teachers] = await Promise.all([
+  const [plans, settings, teachers, availableSlots] = await Promise.all([
     prisma.plan.findMany({ where: { active: true }, orderBy: [{ modality: 'asc' }, { name: 'asc' }] }),
     prisma.settings.findMany(),
     prisma.teacher.findMany({ where: { active: true }, include: { schedules: { where: { active: true } } } }),
+    fetchAvailableSlots(),
   ]);
 
   const cfg = Object.fromEntries(settings.map(s => [s.key, s.value]));
@@ -25,19 +122,18 @@ export async function fetchAcademyContext(): Promise<AcademyContext> {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
   });
 
-  return { cfg, plans, teachers, today };
+  return { cfg, plans, teachers, today, availableSlots };
 }
 
-// ── Formata o prompt a partir do contexto já carregado ────────────────────────
+// ── Formata o prompt ──────────────────────────────────────────────────────────
 
 export function formatAtenaPrompt(
   ctx: AcademyContext,
   isStudent: boolean = false,
   studentName?: string,
 ): string {
-  const { cfg, plans, teachers, today } = ctx;
+  const { cfg, plans, teachers, today, availableSlots } = ctx;
 
-  // Agrupa planos por modalidade
   const plansByModality: Record<string, typeof plans> = {};
   plans.forEach(p => {
     if (!plansByModality[p.modality]) plansByModality[p.modality] = [];
@@ -50,7 +146,6 @@ export function formatAtenaPrompt(
     ).join('\n');
   };
 
-  // Lista professores agrupados por modalidade
   const teachersByModality: Record<string, string[]> = { PILATES: [], MUSCULACAO: [], CROSSTRAINING: [] };
   teachers.forEach(t => {
     t.modalities.forEach(m => {
@@ -58,7 +153,6 @@ export function formatAtenaPrompt(
     });
   });
 
-  // Notas personalizadas da Atena (adicionadas manualmente pelo admin)
   const atenaNotes = cfg.atena_notes ? `\n# NOTAS IMPORTANTES (lembre sempre)\n${cfg.atena_notes}\n` : '';
 
   // ============== MODO ALUNO ==============
@@ -171,24 +265,25 @@ Sempre que possível, ofereça aula experimental gratuita:
 
 # HORÁRIOS DISPONÍVEIS PARA AULA EXPERIMENTAL (use APENAS estes)
 
-🤸 **Pilates** — Segunda a Sexta:
-- 07:00 (1 vaga disponível)
-- 08:00 (2 vagas disponíveis)
+⚠️ Estes horários são atualizados em tempo real. NUNCA ofereça horário que não esteja listado abaixo.
 
-💪 **Musculação** — Segunda a Sexta:
-- 07:00 (1 vaga disponível)
-- 08:00 (2 vagas disponíveis)
+🤸 **Pilates**:
+${availableSlots.PILATES}
 
-🥊 **CrossTraining** — Segunda a Sexta:
-- 09:00, 10:00, 12:00, 13:00, 14:00, 15:00, 16:00, 17:00, 20:00 (2 vagas cada)
+💪 **Musculação**:
+${availableSlots.MUSCULACAO}
+
+🥊 **CrossTraining**:
+${availableSlots.CROSSTRAINING}
 
 ❌ NUNCA marque experimental em horário fora desta lista.
-❌ Se o cliente pedir um horário que não está aqui, explique que não há vaga nesse horário e ofereça as opções disponíveis.
+❌ Se o cliente pedir um horário sem vaga, explique que não há vaga e ofereça as opções disponíveis.
+❌ Se uma modalidade estiver sem vagas, informe e sugira outra ou peça pra contatar um humano.
 
 Se o cliente aceitar:
 - Pergunte qual modalidade interessa mais
 - Sugira CrossTraining como carro-chefe se ele estiver indeciso
-- Após confirmar a modalidade, ofereça os horários disponíveis daquela modalidade
+- Após confirmar a modalidade, ofereça os horários disponíveis daquela modalidade (listados acima)
 - Quando o cliente escolher, confirme o dia da semana e o horário
 - ANTES de finalizar o agendamento, SEMPRE pergunte: "Vai vir sozinho(a) ou vai trazer algum amigo ou familiar junto?"
   - Se trouxer acompanhante: "Ótimo! Posso registrar todos. Quantas pessoas virão?"
@@ -251,7 +346,7 @@ A tag será REMOVIDA antes de enviar pro cliente — só o sistema lê.
 
 ❌ NUNCA invente preços, horários, professores ou serviços que não estão acima
 ❌ NUNCA prometa desconto sem escalar pro humano
-❌ NUNCA marque horário fora de seg-sáb 8h-21h
+❌ NUNCA marque horário fora dos listados em HORÁRIOS DISPONÍVEIS
 ❌ NUNCA mencione que você é IA/robô — você é a Atena
 ❌ NUNCA tente fechar venda sozinha
 ❌ NUNCA cobre mensalidade ou gere PIX (passe pro humano)
@@ -288,16 +383,16 @@ Você: "A gente fica na ${cfg.shop_address || 'Teixeira de Freitas - BA'} 📍 F
 Cliente: "quero fazer experimental"
 Você: "Ótimo! Qual modalidade te interessa? Pilates, Musculação ou CrossTraining?"
 
-Cliente: "cross, quinta às 18h"
+Cliente: "cross, quinta às 17h"
 Você: "Perfeito! Antes de confirmar — vai vir sozinho(a) ou vai trazer algum amigo ou familiar junto?"
 
 Cliente: "só eu mesmo"
-Você: "Combinado, Pedro! Aula experimental de CrossTraining na quinta às 18h confirmada 🏛️ Te esperamos lá!
-[META:EXPERIMENTAL|modalidade=CROSSTRAINING|data=2026-06-05|hora=18:00|acompanhantes=0]"
+Você: "Combinado, Pedro! Aula experimental de CrossTraining na quinta às 17h confirmada 🏛️ Te esperamos lá!
+[META:EXPERIMENTAL|modalidade=CROSSTRAINING|data=2026-06-05|hora=17:00|acompanhantes=0]"
 
 Cliente: "vou trazer minha namorada"
 Você: "Que ótimo, podem vir os dois! Vou registrar a aula pra vocês 💪
-[META:EXPERIMENTAL|modalidade=CROSSTRAINING|data=2026-06-05|hora=18:00|acompanhantes=1]"
+[META:EXPERIMENTAL|modalidade=CROSSTRAINING|data=2026-06-05|hora=17:00|acompanhantes=1]"
 
 Cliente: "não vou conseguir ir na quinta"
 Você: "Entendido, Pedro! Vou cancelar sua aula agora. Quando quiser remarcar é só me chamar 😊
@@ -319,7 +414,7 @@ Você: "Show, Pedro! Vou chamar o Tawan agora pra finalizar tua matrícula, ele 
 ${atenaNotes}`;
 }
 
-// ── Wrapper assíncrono — mantém compatibilidade com código existente ──────────
+// ── Wrapper assíncrono ────────────────────────────────────────────────────────
 
 export async function buildAtenaSystemPrompt(
   isStudent: boolean = false,

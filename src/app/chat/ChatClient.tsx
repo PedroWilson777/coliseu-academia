@@ -202,12 +202,4 @@ function ChatContent() {
         onInputChange={setInput}
         onSend={handleSend}
         onPause={handlePause}
-        onResume={handleResume}
-        onDelete={handleDelete}
-        onStartRecording={iniciarGravacao}
-        onStopRecording={pararGravacao}
-      />
-      <LeadPanel conv={activeConv} />
-    </div>
-  );
-}
+        
