@@ -54,7 +54,7 @@ enum Modality {
 }
 
 enum AppointmentType {
-  EXPERIMENTAL    // Aula experimental gratuita
+  EXPERIMENTAL    // Objetivo do lead gratuita
   REGULAR         // Aula normal de aluno
 }
 
@@ -75,7 +75,7 @@ enum NotificationSeverity {
 enum NotificationType {
   ESCALATION
   NEW_CLOSING_LEAD     // Lead chegou no fechamento
-  EXPERIMENTAL_DONE    // Aula experimental aconteceu
+  EXPERIMENTAL_DONE    // Objetivo do lead  objetivo           String? aconteceu
   AI_FAILED            // Atena falhou
   CUSTOM
 }
@@ -170,7 +170,10 @@ model Lead {
   interestedPlan     String?
   paymentMethod      String?
 
-  // Aula experimental
+  // Objetivo do lead
+    objetivo           String?
+    
+      // Aula experimental
   experimentalDone   Boolean          @default(false)
   experimentalDate   DateTime?
 
@@ -304,6 +307,9 @@ model Appointment {
   type            AppointmentType     @default(REGULAR)
   status          AppointmentStatus   @default(SCHEDULED)
   notes           String?             @db.Text
+
+    reminderSentAt  DateTime?
+      followupSentAt  DateTime?
 
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
