@@ -26,6 +26,10 @@ export async function processMetaTags(
         await handleAlunoExistente(tag, leadId, conversationId);
       } else if (tag.type === 'CANCELAR_AULA') {
         await handleCancelarAula(leadId, conversationId);
+      } else if (tag.type === 'REGISTRAR_OBJETIVO') {
+        await handleRegistrarObjetivo(tag, leadId);
+      } else if (tag.type === 'ALUNO_INATIVO') {
+        await handleAlunoInativo(tag, conversationId);
       }
     } catch (error) {
       console.error(`❌ Erro META ${tag.type}:`, error);
@@ -48,7 +52,6 @@ async function handleExperimental(tag: MetaTag, leadId: string) {
   const scheduledAt = new Date(`${data}T${hora}:00-03:00`);
   if (isNaN(scheduledAt.getTime())) return;
 
-  // Pega qualquer professor da modalidade
   const teacher = await prisma.teacher.findFirst({
     where: { active: true, modalities: { has: modality } },
   });
@@ -104,7 +107,6 @@ async function handleSendPlans(tag: MetaTag, leadId: string, phone: string, appU
 
   await sendWhatsAppImage(phone, imageUrl);
 
-  // Atualiza interesse do lead
   const modalityMap: Record<string, Modality> = {
     PILATES: 'PILATES',
     MUSCULACAO: 'MUSCULACAO',
@@ -202,16 +204,14 @@ async function handleEscalation(tag: MetaTag, conversationId: string) {
 async function handleAlunoExistente(tag: MetaTag, leadId: string, conversationId: string) {
   const { nome } = tag.params;
 
-  // Marca o lead como possível aluno existente que não está no sistema
   await prisma.lead.update({
     where: { id: leadId },
     data: {
-      notes: `⚠️ Cliente informou que já é aluno — verificar cadastro`,
+      notes: `⚠️ Cliente informou que ja e aluno — verificar cadastro`,
       qualification: 'WARM',
     },
-  }).catch(() => {}); // ignora se lead não existe
+  }).catch(() => {});
 
-  // Escala pro humano verificar
   await prisma.conversation.update({
     where: { id: conversationId },
     data: { status: 'WAITING_HUMAN' },
@@ -227,18 +227,17 @@ async function handleAlunoExistente(tag: MetaTag, leadId: string, conversationId
       conversationId,
       type: 'ESCALATION',
       severity: 'MEDIUM',
-      title: `${nome || conv?.lead?.name || 'Cliente'} diz que já é aluno`,
-      detail: `Pessoa informou que já é aluno mas não está cadastrada no sistema. Verificar matrícula e cadastrar se necessário.`,
+      title: `${nome || conv?.lead?.name || 'Cliente'} diz que ja e aluno`,
+      detail: `Pessoa informou que ja e aluno mas nao esta cadastrada no sistema. Verificar matricula e cadastrar se necessario.`,
     },
   });
 
-  console.log(`👤 Possível aluno não cadastrado: ${nome || 'sem nome'}`);
+  console.log(`👤 Possivel aluno nao cadastrado: ${nome || 'sem nome'}`);
 }
 
 async function handleCancelarAula(leadId: string, conversationId: string) {
   const now = new Date();
 
-  // Cancela o próximo agendamento futuro do lead
   const appointment = await prisma.appointment.findFirst({
     where: {
       leadId,
@@ -258,11 +257,71 @@ async function handleCancelarAula(leadId: string, conversationId: string) {
     data: { status: 'CANCELLED' },
   });
 
-  // Volta o lead pra QUALIFIED (ainda tem interesse, só cancelou a aula)
   await prisma.lead.update({
     where: { id: leadId },
     data: { stage: 'QUALIFIED' },
   }).catch(() => {});
 
   console.log(`❌ Aula cancelada: ${appointment.id} (${appointment.modality} ${appointment.scheduledAt.toLocaleString('pt-BR')})`);
+}
+
+async function handleRegistrarObjetivo(tag: MetaTag, leadId: string) {
+  const { objetivo } = tag.params;
+  if (!objetivo) return;
+
+  const validObjetivos = ['EMAGRECIMENTO', 'GANHO_MASSA', 'CONDICIONAMENTO', 'SAUDE_QUALIDADE', 'OUTRO'];
+  const obj = objetivo.toUpperCase();
+  const objetivoNormalizado = validObjetivos.includes(obj) ? obj : 'OUTRO';
+
+  await prisma.lead.update({
+    where: { id: leadId },
+    data: { objetivo: objetivoNormalizado },
+  }).catch(() => {});
+
+  console.log(`🎯 Objetivo registrado: ${objetivoNormalizado}`);
+}
+
+async function handleAlunoInativo(tag: MetaTag, conversationId: string) {
+  const { nome, motivo } = tag.params;
+  const validMotivos = ['FINANCEIRO', 'TEMPO', 'ROTINA', 'INSATISFACAO', 'SAUDE', 'CIDADE', 'OUTRO'];
+  const mot = (motivo || 'OUTRO').toUpperCase();
+  const motivoNormalizado = validMotivos.includes(mot) ? mot : 'OUTRO';
+
+  const motivoLabels: Record<string, string> = {
+    FINANCEIRO: 'dificuldades financeiras',
+    TEMPO: 'falta de tempo',
+    ROTINA: 'mudanca de rotina',
+    INSATISFACAO: 'insatisfacao com o servico',
+    SAUDE: 'problema de saude',
+    CIDADE: 'mudou de cidade',
+    OUTRO: 'motivo nao especificado',
+  };
+
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: { student: true },
+  });
+
+  if (conv?.student) {
+    await prisma.student.update({
+      where: { id: conv.student.id },
+      data: {
+        notes: `⚠️ Inativo — motivo: ${motivoLabels[motivoNormalizado]} (${new Date().toLocaleDateString('pt-BR')})`,
+        status: 'INACTIVE',
+      },
+    }).catch(() => {});
+  }
+
+  const personName = nome || conv?.student?.name || 'Aluno';
+  await prisma.supervisorNotification.create({
+    data: {
+      conversationId,
+      type: 'ESCALATION',
+      severity: 'MEDIUM',
+      title: `${personName} esta inativo — reengajamento necessario`,
+      detail: `Motivo: ${motivoLabels[motivoNormalizado]}. Recomendado: abordagem consultiva e acolhedora para recuperar o aluno.`,
+    },
+  });
+
+  console.log(`😴 Aluno inativo detectado: ${personName} — motivo: ${motivoNormalizado}`);
 }
