@@ -119,41 +119,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, handled: 'waiting' });
     }
 
-    // REGRA: ATENA SO ATENDE LEADS, NAO ALUNOS
-    if (identity.type === 'STUDENT') {
-      console.log('Aluno ' + identity.student.name + ' mandou mensagem - escalando pro humano');
+    // ALUNOS: Atena responde com FAQ, escalando quando necessário
+    const isStudent = identity.type === 'STUDENT';
+    const studentName = isStudent ? identity.student.name : undefined;
 
-      await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { status: 'WAITING_HUMAN' },
-      });
-
-      const existingNotif = await prisma.supervisorNotification.findFirst({
-        where: {
-          conversationId: conversation.id,
-          type: 'ESCALATION',
-          resolvedAt: null,
-        },
-      });
-
-      if (!existingNotif) {
-        await prisma.supervisorNotification.create({
-          data: {
-            conversationId: conversation.id,
-            type: 'ESCALATION',
-            severity: 'MEDIUM',
-            title: identity.student.name + ' (aluno) precisa de atendimento',
-            detail: 'Aluno cadastrado mandou mensagem. Atena nao responde alunos - assumir manualmente.',
-          },
-        });
-      }
-
-      return NextResponse.json({ ok: true, handled: 'student-no-reply' });
-    }
-
-    // ATENA RESPONDE (so pra LEAD)
+    // ATENA RESPONDE (leads e alunos — alunos usam prompt de FAQ/suporte)
     try {
-      const atena = await askAtena(conversation.id, false, undefined);
+      const atena = await askAtena(conversation.id, isStudent, studentName);
 
       // Salva resposta
       await prisma.message.create({
@@ -165,8 +137,8 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Processa META tags
-      if (atena.metaTags.length > 0) {
+      // Processa META tags (só para leads — alunos não têm lead.id)
+      if (atena.metaTags.length > 0 && !isStudent) {
         const appUrl = process.env.APP_URL || process.env.NEXTAUTH_URL || '';
         await processMetaTags(
           atena.metaTags,
@@ -175,6 +147,29 @@ export async function POST(req: NextRequest) {
           phone,
           appUrl
         );
+      }
+
+      // Se Atena escalou aluno → notifica supervisor
+      if (isStudent && atena.metaTags.some(t => t.type === 'ESCALAR' || t.type === 'ALUNO_INATIVO')) {
+        await prisma.conversation.update({
+          where: { id: conversation.id },
+          data: { status: 'WAITING_HUMAN' },
+        });
+        const existingNotif = await prisma.supervisorNotification.findFirst({
+          where: { conversationId: conversation.id, type: 'ESCALATION', resolvedAt: null },
+        });
+        if (!existingNotif) {
+          const motivo = atena.metaTags.find(t => t.type === 'ESCALAR')?.params?.motivo || 'Aluno precisa de atendimento';
+          await prisma.supervisorNotification.create({
+            data: {
+              conversationId: conversation.id,
+              type: 'ESCALATION',
+              severity: 'MEDIUM',
+              title: (studentName || 'Aluno') + ' precisa de atendimento',
+              detail: motivo,
+            },
+          });
+        }
       }
 
       // Envia texto da resposta — loga falha e notifica supervisor

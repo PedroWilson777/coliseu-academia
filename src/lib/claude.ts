@@ -29,12 +29,15 @@ export async function askAtena(
   });
   const messages = rawMessages.reverse();
 
+  // Considera "retornando" se já houve pelo menos uma troca anterior (2+ mensagens)
+  const isReturning = messages.length >= 2;
+
   const apiMessages: { role: 'user' | 'assistant'; content: string }[] = messages.map(m => ({
     role: m.sender === 'CLIENT' ? 'user' : 'assistant',
     content: m.audioTranscript ? `[áudio transcrito]: ${m.audioTranscript}` : m.content,
   }));
 
-  const systemPrompt = await buildAtenaSystemPrompt(isStudent, studentName);
+  const systemPrompt = await buildAtenaSystemPrompt(isStudent, studentName, isReturning);
 
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -49,7 +52,10 @@ export async function askAtena(
     .join('\n');
 
   const metaTags = extractMetaTags(rawText);
-  const cleanText = rawText.replace(/\[META:[^\]]+\]/g, '').trim();
+  const cleanText = rawText
+    .replace(/\[META:[^\]]+\]/g, '')
+    .replace(/\*\*([^*]+)\*\*/g, '*$1*') // converte ** para * (WhatsApp bold)
+    .trim();
 
   return { text: cleanText, metaTags, raw: rawText };
 }
