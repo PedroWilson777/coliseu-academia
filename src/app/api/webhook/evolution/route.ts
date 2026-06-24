@@ -119,12 +119,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, handled: 'waiting' });
     }
 
-    // ALUNOS: Atena responde com FAQ, escalando quando necessário
-    const isStudent = identity.type === 'STUDENT';
-    const studentName = isStudent ? identity.student.name : undefined;
-
     // ATENA RESPONDE (leads e alunos — alunos usam prompt de FAQ/suporte)
     try {
+      // Type guard explícito para evitar ambiguidade em runtime
+      const isStudent = identity.type === 'STUDENT';
+      const studentName = identity.type === 'STUDENT' ? identity.student.name : undefined;
+      const leadId = identity.type === 'LEAD' ? identity.lead.id : null;
+
       const atena = await askAtena(conversation.id, isStudent, studentName);
 
       // Salva resposta
@@ -137,16 +138,10 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Processa META tags (só para leads — alunos não têm lead.id)
-      if (atena.metaTags.length > 0 && !isStudent) {
+      // Processa META tags — só para leads (leadId existe)
+      if (atena.metaTags.length > 0 && leadId) {
         const appUrl = process.env.APP_URL || process.env.NEXTAUTH_URL || '';
-        await processMetaTags(
-          atena.metaTags,
-          conversation.id,
-          identity.lead.id,
-          phone,
-          appUrl
-        );
+        await processMetaTags(atena.metaTags, conversation.id, leadId, phone, appUrl);
       }
 
       // Se Atena escalou aluno → notifica supervisor

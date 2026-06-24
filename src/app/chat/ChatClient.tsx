@@ -41,8 +41,10 @@ function ChatContent() {
   const [filter, setFilter] = useState('all');
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [gravando, setGravando] = useState(false);
   const [enviandoAudio, setEnviandoAudio] = useState(false);
+  const [enviandoMidia, setEnviandoMidia] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -119,17 +121,54 @@ function ChatContent() {
   const handleSend = async () => {
     if (!input.trim() || !activeConv || sending) return;
     setSending(true);
+    setSendError(null);
     try {
-      await fetch(`/api/conversations/${activeConv.id}/messages`, {
+      const res = await fetch(`/api/conversations/${activeConv.id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: input.trim() }),
       });
+      if (res.status === 207) {
+        setSendError('Mensagem salva, mas falhou ao enviar pro WhatsApp. Verifique a conexão com a Evolution API.');
+      } else if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setSendError(err.error || 'Erro ao enviar mensagem.');
+        return;
+      }
       setInput('');
       await loadConv(activeConv.id);
       await loadInbox();
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleSendMedia = async (file: File, caption: string) => {
+    if (!activeConv) return;
+    setEnviandoMidia(true);
+    setSendError(null);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
+      const res = await fetch(`/api/conversations/${activeConv.id}/media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaBase64: base64, mediaType, mimeType: file.type, fileName: file.name, caption }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setSendError(err.error || 'Falha ao enviar mídia.');
+        return;
+      }
+      await loadConv(activeConv.id);
+      await loadInbox();
+    } finally {
+      setEnviandoMidia(false);
     }
   };
 
@@ -196,17 +235,19 @@ function ChatContent() {
         isPaused={isPaused}
         input={input}
         sending={sending}
+        sendError={sendError}
         gravando={gravando}
         enviandoAudio={enviandoAudio}
+        enviandoMidia={enviandoMidia}
         messagesEndRef={messagesEndRef}
         onInputChange={setInput}
         onSend={handleSend}
         onPause={handlePause}
-        
         onResume={handleResume}
         onDelete={handleDelete}
         onStartRecording={iniciarGravacao}
         onStopRecording={pararGravacao}
+        onSendMedia={handleSendMedia}
       />
       <LeadPanel conv={activeConv} />
     </div>
